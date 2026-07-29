@@ -1,0 +1,1090 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EELS-ZEST Theory and Methods</title>
+  <meta name="description" content="Theory and methods for EELS-ZEST zero-loss estimation, sparse phonon-mode source-intensity reconstruction, attention-guided Bose-Einstein thermometry, uncertainty, and reliability.">
+  <meta name="author" content="Ruilin Mao, International Center for Quantum Materials (ICQM), Peking University">
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    :root {
+      --page: #eef1f3;
+      --paper: #ffffff;
+      --soft: #f5f7f8;
+      --ink: #1f282e;
+      --muted: #66747c;
+      --line: #d8dfe3;
+      --blue: #176b8f;
+      --blue-dark: #0f4f6c;
+      --green: #2e735d;
+      --amber: #9b681b;
+      --side: #252b2f;
+      --side-hover: #313a3f;
+      --side-text: #e9eef0;
+      --side-muted: #aeb9be;
+      --code: #f1f4f5;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 24px;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--page);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 16px;
+      line-height: 1.62;
+    }
+
+    body.nav-open { overflow: hidden; }
+
+    a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    a:focus-visible,
+    button:focus-visible {
+      outline: 3px solid #79b8d5;
+      outline-offset: 3px;
+    }
+
+    .skip-link {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
+      padding: 8px 12px;
+      color: #fff;
+      background: var(--blue-dark);
+      transform: translateY(-160%);
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .layout {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 290px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      color: var(--side-text);
+      background: var(--side);
+      border-right: 1px solid #15191b;
+      z-index: 30;
+    }
+
+    .brand {
+      padding: 24px 22px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand img {
+      width: 58px;
+      height: 58px;
+      object-fit: contain;
+      flex: 0 0 auto;
+      background: #fff;
+      border-radius: 6px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      color: #fff;
+      font-size: 24px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .brand p {
+      margin: 5px 0 0;
+      color: var(--side-muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .version {
+      margin: 16px 22px 7px;
+      padding: 7px 9px;
+      color: #e3f3f8;
+      background: rgba(23, 107, 143, 0.32);
+      border: 1px solid rgba(163, 213, 233, 0.2);
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    .home-link {
+      display: block;
+      margin: 10px 22px 4px;
+      color: #b8dcea;
+      font-size: 13px;
+    }
+
+    .home-link:hover { color: #fff; }
+
+    .nav-title {
+      padding: 14px 22px 7px;
+      color: var(--side-muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .toc {
+      list-style: none;
+      margin: 0;
+      padding: 0 0 28px;
+    }
+
+    .toc a {
+      display: block;
+      padding: 8px 22px;
+      color: var(--side-text);
+      border-left: 4px solid transparent;
+      font-size: 14px;
+    }
+
+    .toc a:hover {
+      color: #fff;
+      background: var(--side-hover);
+      text-decoration: none;
+    }
+
+    .toc a.active {
+      color: #fff;
+      background: #304550;
+      border-left-color: #6fb4d0;
+      font-weight: 700;
+    }
+
+    .nav-scrim,
+    .sidebar-close { display: none; }
+
+    .sidebar-close {
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      background: #243842;
+      border: 1px solid rgba(255, 255, 255, 0.42);
+      border-radius: 4px;
+      font-size: 21px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .content-shell {
+      min-width: 0;
+      background: var(--paper);
+    }
+
+    .topbar {
+      min-height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 0 34px;
+      color: var(--muted);
+      background: var(--soft);
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .menu-button {
+      display: none;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      font-size: 21px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    main {
+      width: min(100%, 1080px);
+      padding: 44px 58px 72px;
+    }
+
+    section,
+    header[id] {
+      scroll-margin-top: 22px;
+    }
+
+    .doc-header {
+      padding-bottom: 30px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .doc-header h1 {
+      margin: 0;
+      font-size: 42px;
+      font-weight: 600;
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    .doc-header p {
+      max-width: 840px;
+      margin: 15px 0 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    section {
+      padding-top: 26px;
+      margin-top: 18px;
+    }
+
+    h2 {
+      margin: 0 0 15px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 22px 0 8px;
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+
+    p { margin: 12px 0; }
+
+    ul,
+    ol { padding-left: 24px; }
+
+    li { margin: 5px 0; }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+
+    .summary-item {
+      min-width: 0;
+      padding: 15px 16px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #fbfcfc;
+    }
+
+    .summary-item strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .summary-item p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .note {
+      margin: 18px 0;
+      padding: 14px 16px;
+      border-left: 4px solid var(--amber);
+      background: #fff8ea;
+    }
+
+    .note strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #68450f;
+    }
+
+    .method-note {
+      margin: 18px 0;
+      padding: 14px 16px;
+      border-left: 4px solid var(--blue);
+      background: #eef7fa;
+    }
+
+    code,
+    pre {
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      font-size: 14px;
+    }
+
+    code {
+      padding: 1px 4px;
+      background: var(--code);
+      border-radius: 3px;
+    }
+
+    pre {
+      max-width: 100%;
+      overflow: auto;
+      margin: 14px 0;
+      padding: 15px 17px;
+      background: var(--code);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      line-height: 1.46;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+    }
+
+    table {
+      width: 100%;
+      margin: 16px 0;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: #eef3f5;
+      font-weight: 700;
+    }
+
+    .equation-label {
+      margin-top: -4px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    mjx-container[display="true"] {
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 5px 0;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      margin-top: 48px;
+      padding-top: 22px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      font-size: 14px;
+    }
+
+    @media (max-width: 980px) {
+      .summary-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: min(310px, 86vw);
+        transform: translateX(-105%);
+        transition: transform 180ms ease;
+        box-shadow: 8px 0 24px rgba(0, 0, 0, 0.24);
+      }
+
+      body.nav-open .sidebar { transform: translateX(0); }
+
+      .nav-scrim {
+        position: fixed;
+        inset: 0;
+        display: block;
+        visibility: hidden;
+        opacity: 0;
+        z-index: 20;
+        padding: 0;
+        background: rgba(11, 18, 22, 0.48);
+        border: 0;
+        transition: opacity 180ms ease, visibility 180ms ease;
+      }
+
+      body.nav-open .nav-scrim {
+        visibility: visible;
+        opacity: 1;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        padding: 8px 18px;
+      }
+
+      .menu-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+
+      .sidebar .brand { padding-right: 72px; }
+
+      body.nav-open .sidebar-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        z-index: 1;
+        display: inline-flex;
+      }
+
+      .topbar-right { display: none; }
+
+      main { padding: 30px 22px 54px; }
+
+      .doc-header h1 { font-size: 34px; }
+    }
+
+    @media (max-width: 650px) {
+      .footer {
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .sidebar,
+      .nav-scrim { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar" aria-label="Theory navigation">
+      <button class="sidebar-close" type="button" aria-label="Close navigation" title="Close navigation">&#10005;</button>
+      <div class="brand">
+        <div class="brand-row">
+          <img src="../logo.png" alt="EELS-ZEST logo">
+          <div>
+            <h1>EELS-ZEST</h1>
+            <p>Zero-loss Estimation<br>and Sparse Thermometry</p>
+          </div>
+        </div>
+      </div>
+      <div class="version">Theory and Methods / v2.0</div>
+      <a class="home-link" href="../index.html">Back to documentation home</a>
+      <div class="nav-title">Contents</div>
+      <nav>
+        <ul class="toc">
+          <li><a class="active" href="#overview">1. Overview</a></li>
+          <li><a href="#symbols">2. Symbols</a></li>
+          <li><a href="#measurement">3. Measurement model</a></li>
+          <li><a href="#zlp">4. ZLP model</a></li>
+          <li><a href="#sparse">5. Sparse convolution</a></li>
+          <li><a href="#stage1">6. Stage 1 objective</a></li>
+          <li><a href="#attention">7. Attention</a></li>
+          <li><a href="#stage2">8. Stage 2 thermometry</a></li>
+          <li><a href="#uncertainty">9. Reliability</a></li>
+          <li><a href="#spatial">10. Spatial diagnostics</a></li>
+          <li><a href="#intensity">11. Sparse intensity and RL</a></li>
+          <li><a href="#terminology">12. Terminology</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <button class="nav-scrim" type="button" aria-label="Close navigation" tabindex="-1"></button>
+
+    <div class="content-shell">
+      <div class="topbar">
+        <div class="topbar-left">
+          <button class="menu-button" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar" title="Open navigation">&#9776;</button>
+          <span><a href="../index.html">EELS-ZEST documentation</a> / theory</span>
+        </div>
+        <div class="topbar-right">Mathematical model and diagnostics</div>
+      </div>
+
+      <main id="main-content">
+        <header class="doc-header" id="overview">
+          <p class="eyebrow">EELS-ZEST v2.0</p>
+          <h1>Theory and Methods</h1>
+          <p>
+            Mathematical definitions for fitted-ZLP sparse reconstruction,
+            attention-selected Bose-Einstein thermometry, uncertainty, spatial
+            diagnostics, and sparse phonon-mode source-intensity analysis.
+          </p>
+        </header>
+
+        <section>
+          <h2>1. Overview</h2>
+          <p>
+            EELS-ZEST separates the general problem of reconstructing an EELS
+            spectrum from the more restrictive problem of inferring temperature.
+            Stage 1 explains spectral shape. Stage 2 constrains temperature only
+            with paired gain/loss evidence selected by attention.
+          </p>
+          <div class="summary-grid">
+            <div class="summary-item">
+              <strong>Fitted ZLP kernel</strong>
+              <p>The complete fitted ZLP is centered at 0 meV and used as the signal kernel.</p>
+            </div>
+            <div class="summary-item">
+              <strong>Hard BE pairs</strong>
+              <p>Paired attention modes constrain temperature through detailed balance.</p>
+            </div>
+            <div class="summary-item">
+              <strong>Independent soft intensities</strong>
+              <p>Other modes remain in the fit without controlling temperature.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="symbols">
+          <h2>2. Symbols</h2>
+          <table>
+            <thead>
+              <tr><th>Symbol</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>\(E\)</td><td>Energy-loss axis in meV.</td></tr>
+              <tr><td>\(y(E)\)</td><td>Measured spectrum.</td></tr>
+              <tr><td>\(\tilde y(E)\)</td><td>Normalized measured spectrum.</td></tr>
+              <tr><td>\(I_{\mathrm{fit}}(E)\)</td><td>Fitted total spectrum.</td></tr>
+              <tr><td>\(I_{\mathrm{ZLP}}(E)\)</td><td>Fitted zero-loss peak.</td></tr>
+              <tr><td>\(K_{\mathrm{ZLP}}(E)\)</td><td>Normalized fitted-ZLP convolution kernel.</td></tr>
+              <tr><td>\(I_{\mathrm{vib}}(E)\)</td><td>Vibrational signal reconstructed by sparse convolution.</td></tr>
+              <tr><td>\(E_{M,i}\)</td><td>Positive energy center of the \(i\)-th sparse phonon mode.</td></tr>
+              <tr><td>\(p_i^+\)</td><td>Stokes/loss source intensity.</td></tr>
+              <tr><td>\(p_i^-\)</td><td>Anti-Stokes/gain source intensity.</td></tr>
+              <tr><td>\(a(E)\)</td><td>Attention profile on the measured energy axis.</td></tr>
+              <tr><td>\(s_i^{\mathrm{pair}}\)</td><td>Paired attention score at \(E_{M,i}\).</td></tr>
+              <tr><td>\(\mathcal H\)</td><td>Hard-BE mode set selected by paired attention.</td></tr>
+              <tr><td>\(\mathcal S\)</td><td>Soft source-intensity set outside the hard-BE selection.</td></tr>
+              <tr><td>\(T\), \(\hat T\)</td><td>Candidate and fitted temperatures.</td></tr>
+              <tr><td>\(k_B\)</td><td>Boltzmann constant, \(0.0861733\ \mathrm{meV/K}\).</td></tr>
+              <tr><td>\(R^2\)</td><td>Coefficient of determination.</td></tr>
+              <tr><td>\(\mathrm{NRMSE}\)</td><td>Normalized root-mean-square error.</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="measurement">
+          <h2>3. Measurement Model</h2>
+          <p>
+            The measured low-loss spectrum is modeled as a fitted ZLP plus a
+            sparse vibrational response and residual noise:
+          </p>
+          \[
+          y(E)
+          =
+          I_{\mathrm{ZLP}}(E)
+          +
+          I_{\mathrm{vib}}(E)
+          +
+          \epsilon(E).
+          \]
+          <p>The fitted spectrum is</p>
+          \[
+          I_{\mathrm{fit}}(E)
+          =
+          I_{\mathrm{ZLP}}(E;\theta_{\mathrm{ZLP}})
+          +
+          I_{\mathrm{vib}}(E;\theta_{\mathrm{src}},T).
+          \]
+          <div class="method-note">
+            The reconstruction uses the fitted total ZLP as the signal kernel.
+            The aligned energy axis is therefore a first-class input condition,
+            not a free temperature-compensation variable.
+          </div>
+        </section>
+
+        <section id="zlp">
+          <h2>4. ZLP Model</h2>
+          <p>
+            The ZLP is represented by a bounded sum of asymmetric components:
+          </p>
+          \[
+          I_{\mathrm{ZLP}}(E)
+          =
+          \sum_{j=1}^{N_Z}
+          A_j\,
+          \phi_j(E-\delta-c_j;\theta_j),
+          \qquad A_j \ge 0.
+          \]
+          <p>
+            An asymmetric Pearson-type component can be written as
+          </p>
+          \[
+          \phi_{\mathrm{Pearson}}(x)
+          =
+          \begin{cases}
+          \left(1+\dfrac{x^2}{m_Ls_L^2}\right)^{-m_L}, & x<0,\\[7pt]
+          \left(1+\dfrac{x^2}{m_Rs_R^2}\right)^{-m_R}, & x\ge0.
+          \end{cases}
+          \]
+          <p>
+            After fitting, the signal kernel is normalized from the complete
+            fitted ZLP:
+          </p>
+          \[
+          K_{\mathrm{ZLP}}(E)
+          =
+          \frac{\max[I_{\mathrm{ZLP}}(E),0]}
+          {\sum_E \max[I_{\mathrm{ZLP}}(E),0]}.
+          \]
+          <div class="note">
+            <strong>Kernel center</strong>
+            For prealigned input, the fitted-ZLP kernel center is fixed at
+            \(0\ \mathrm{meV}\). A displaced kernel indicates an energy-axis or
+            preprocessing problem that should be corrected before interpreting
+            sparse mode positions or temperature.
+          </div>
+        </section>
+
+        <section id="sparse">
+          <h2>5. Sparse Convolution</h2>
+          <p>
+            For positive sparse-mode centers \(E_{M,i}\), the vibrational signal is
+            reconstructed from loss- and gain-side shifted copies of the fitted
+            ZLP kernel:
+          </p>
+          \[
+          I_{\mathrm{vib}}(E)
+          =
+          \sum_i p_i^+ K_{\mathrm{ZLP}}(E-E_{M,i})
+          +
+          \sum_i p_i^- K_{\mathrm{ZLP}}(E+E_{M,i}),
+          \qquad p_i^+,p_i^- \ge 0.
+          \]
+          <p>
+            The coefficients describe source-space intensity before convolution
+            with the instrumental ZLP response. Sparsity and smoothness are
+            regularized along the sparse mode-energy axis, while spectral
+            fidelity is evaluated after reconvolution.
+          </p>
+        </section>
+
+        <section id="stage1">
+          <h2>6. Stage 1 Objective</h2>
+          <p>
+            Stage 1 prioritizes spectral shape and stable ZLP separation. A
+            representative objective is
+          </p>
+          \[
+          \mathcal L_1
+          =
+          \left\|
+          W(E)\left[\tilde y(E)-\tilde I_{\mathrm{fit}}(E)\right]
+          \right\|_2^2
+          +
+          \lambda_1\|\mathbf p\|_1
+          +
+          \lambda_2\|\mathbf p\|_2^2
+          +
+          \lambda_{\mathrm{sm}}\|D\mathbf p\|_2^2
+          +
+          \mathcal R_{\mathrm{ZLP}}.
+          \]
+          <p>
+            \(W(E)\) balances the ZLP core, vibrational windows, and tails.
+            \(\mathcal R_{\mathrm{ZLP}}\) keeps component widths, centers, and
+            amplitudes physically bounded. Any BE relation at this stage acts as
+            a weak consistency cue rather than a hard temperature constraint.
+          </p>
+        </section>
+
+        <section id="attention">
+          <h2>7. Attention And Mode Partition</h2>
+          <p>
+            The attention profile combines signal strength, structured residuals,
+            and source-intensity-supported features. For a mode center, paired
+            evidence is
+          </p>
+          \[
+          s_i^{\mathrm{pair}}
+          =
+          \sqrt{
+          a(+E_{M,i})\,a(-E_{M,i})
+          }.
+          \]
+          <p>The default hard set is</p>
+          \[
+          \mathcal H
+          =
+          \left\{
+          i:\ s_i^{\mathrm{pair}}\ge0.35
+          \right\}.
+          \]
+          <p>
+            If too few hard pairs are available, the highest-scoring candidates
+            with \(s_i^{\mathrm{pair}}\ge0.10\) may supplement the set. If the
+            minimum pair count is still not reached, the result is flagged as
+            insufficient hard-BE evidence.
+          </p>
+          \[
+          \mathcal S
+          =
+          \{i\}\setminus\mathcal H.
+          \]
+          <div class="method-note">
+            The solver does not turn all EM centers into hard-BE pairs when
+            attention evidence is insufficient. This preserves a meaningful
+            distinction between temperature evidence and shape-only reconstruction.
+          </div>
+        </section>
+
+        <section id="stage2">
+          <h2>8. Stage 2 Thermometry</h2>
+          <h3>Hard-BE contribution</h3>
+          <p>
+            For \(i\in\mathcal H\), anti-Stokes source intensity is generated from
+            the Stokes source intensity by Bose-Einstein detailed balance:
+          </p>
+          \[
+          p_i^-(T)
+          =
+          p_i^+(T)
+          \exp\left[
+          -\frac{E_{M,i}}{k_BT}
+          \right].
+          \]
+
+          <h3>Soft source-intensity contribution</h3>
+          <p>
+            For \(i\in\mathcal S\), loss and gain source intensities remain
+            independent:
+          </p>
+          \[
+          p_{i,\mathrm{soft}}^+\ge0,
+          \qquad
+          p_{i,\mathrm{soft}}^-\ge0.
+          \]
+          <p>The complete reconstructed signal is</p>
+          \[
+          I_{\mathrm{vib}}(E,T)
+          =
+          I_{\mathrm{hard}}(E,T)
+          +
+          I_{\mathrm{soft}}(E).
+          \]
+          <p>
+            Soft-intensity regularization controls roughness and excessive
+            amplitude, while retaining enough freedom to fit mixed materials,
+            broad tails, and non-equilibrium gain/loss asymmetry.
+          </p>
+
+          <h3>Temperature scan</h3>
+          <p>
+            For each candidate temperature, nonnegative sparse source-intensity
+            coefficients are optimized and the profile cost is recorded:
+          </p>
+          \[
+          C(T)
+          =
+          C_{\mathrm{data}}(T)
+          +
+          C_{\mathrm{src}}(T)
+          +
+          C_{\mathrm{ZLP}}(T)
+          +
+          C_{\mathrm{guard}}(T).
+          \]
+          \[
+          \hat T = \arg\min_T C_{\mathrm{smooth}}(T).
+          \]
+          <p>
+            The scan uses a coarse-to-fine temperature grid followed by
+            distance-aware smoothing. The reported cost valley comes directly
+            from the stored raw and smoothed profile arrays.
+          </p>
+
+          <h3>BE linearity</h3>
+          <p>Hard attention pairs satisfy</p>
+          \[
+          \ln\left(\frac{p_i^+}{p_i^-}\right)
+          =
+          \frac{E_{M,i}}{k_BT},
+          \qquad i\in\mathcal H.
+          \]
+          <p>
+            The fitted line is constrained through the origin. Soft source
+            intensities and rejected pairs are shown only as diagnostic points
+            and do not enter the temperature-linearity score.
+          </p>
+        </section>
+
+        <section id="uncertainty">
+          <h2>9. Uncertainty And Reliability</h2>
+          <p>
+            The temperature uncertainty is estimated from the low-cost region
+            around \(\hat T\). The default diagnostic interval contains candidate
+            temperatures within ten percent of the local cost-valley rise.
+          </p>
+          <p>Spectral goodness is summarized by</p>
+          \[
+          R^2
+          =
+          1-
+          \frac{\sum_E [y(E)-I_{\mathrm{fit}}(E)]^2}
+          {\sum_E [y(E)-\bar y]^2},
+          \]
+          \[
+          \mathrm{NRMSE}
+          =
+          \frac{
+          \sqrt{\left\langle[y-I_{\mathrm{fit}}]^2\right\rangle}
+          }
+          {\max(y)-\min(y)}.
+          \]
+          <p>
+            Temperature reliability combines hard-pair coverage, BE linearity,
+            uncertainty, anti-Stokes evidence, fit quality, boundary hits, and
+            optimizer stability. A high full-spectrum \(R^2\) alone is not
+            sufficient evidence for a reliable temperature.
+          </p>
+          <div class="note">
+            <strong>Interpretation rule</strong>
+            Reported temperature should be read together with hard-pair count,
+            linearity, cost-valley width, reliability, and the gain-side residual.
+          </div>
+        </section>
+
+        <section id="spatial">
+          <h2>10. Datacube Spatial Diagnostics</h2>
+          <p>
+            Datacube processing compares each fitted pixel with its local
+            neighborhood using temperature, attention-peak position,
+            signal-peak position, spectral profile, and fit quality:
+          </p>
+          \[
+          D_{\mathrm{nbr}}(x,y)
+          =
+          \operatorname{median}_{(u,v)\in\mathcal N(x,y)}
+          \left[
+          \alpha_T |T_{xy}-T_{uv}|
+          +
+          \alpha_A \Delta A_{xy,uv}
+          +
+          \alpha_S \Delta S_{xy,uv}
+          \right].
+          \]
+          <p>
+            Feature-aware weights reduce coupling across likely material
+            interfaces:
+          </p>
+          \[
+          \omega_{\mathrm{edge}}(x,y;u,v)
+          =
+          \exp\left[
+          -\gamma\,
+          \Delta_{\mathrm{feature}}(x,y;u,v)
+          \right].
+          \]
+          <p>
+            Spatial repair targets isolated low-reliability pixels. Interface
+            pixels are identified from spectral changes so genuine material
+            boundaries are not flattened into neighboring temperatures.
+          </p>
+        </section>
+
+        <section id="intensity">
+          <h2>11. Sparse Intensity And RL Analysis</h2>
+          <h3>Signed source-intensity representation</h3>
+          <p>
+            Fitted sparse phonon-mode source intensities can be mapped to a signed
+            source-energy axis:
+          </p>
+          \[
+          P_{\mathrm{signed}}(-E_{M,i})=p_i^-,
+          \qquad
+          P_{\mathrm{signed}}(+E_{M,i})=p_i^+.
+          \]
+          <p>
+            The signed source-intensity cube supports energy-window maps, NMF,
+            clustering, and loss/gain mode comparison.
+          </p>
+
+          <h3>Richardson-Lucy diagnostic</h3>
+          <p>
+            When a fitted result is available, the fitted-ZLP kernel can be used
+            as the point-spread function for deconvolving the reconstructed
+            vibrational target:
+          </p>
+          \[
+          S_{\mathrm{target}}(E)
+          =
+          y(E)-I_{\mathrm{ZLP}}(E)-I_{\mathrm{bg}}(E).
+          \]
+          <p>
+            RL output is a post-fit latent-signal diagnostic. Reconvolution with
+            \(K_{\mathrm{ZLP}}\), residual quality, and stability across iteration
+            counts should be checked before comparing peak positions.
+          </p>
+        </section>
+
+        <section id="terminology">
+          <h2>12. Terminology And MATLAB Field Names</h2>
+          <p>
+            The coefficients \(p_i^+\) and \(p_i^-\) are described throughout
+            this page as <strong>sparse phonon-mode source intensities</strong>.
+            They are nonnegative source-space weights before convolution with the
+            fitted ZLP kernel and are not, by themselves, an absolutely calibrated
+            phonon DOS.
+          </p>
+          <p>
+            For compatibility with existing MATLAB result files, the code
+            abbreviates <strong>phonon-mode intensity</strong> as
+            <strong>PM</strong>. The main fields are <code>PM_stokes</code>,
+            <code>PM_antistokes</code>, and <code>EM_final</code>.
+          </p>
+        </section>
+
+        <div class="footer">
+          <span>Ruilin Mao · ICQM, Peking University · <a href="../LICENSE">GPL-3.0-only</a></span>
+          <span><a href="#overview">Back to top</a></span>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const body = document.body;
+      const menuButton = document.querySelector('.menu-button');
+      const sidebarClose = document.querySelector('.sidebar-close');
+      const scrim = document.querySelector('.nav-scrim');
+      const tocLinks = Array.from(document.querySelectorAll('.toc a[href^="#"]'));
+      const sections = tocLinks
+        .map((link) => document.querySelector(link.getAttribute('href')))
+        .filter(Boolean);
+
+      const setNavigationOpen = (open) => {
+        body.classList.toggle('nav-open', open);
+        menuButton.setAttribute('aria-expanded', String(open));
+      };
+
+      const setActiveLink = (id) => {
+        tocLinks.forEach((link) => {
+          const active = link.getAttribute('href') === `#${id}`;
+          link.classList.toggle('active', active);
+          if (active) {
+            link.setAttribute('aria-current', 'location');
+          } else {
+            link.removeAttribute('aria-current');
+          }
+        });
+      };
+
+      menuButton.addEventListener('click', () => {
+        setNavigationOpen(true);
+        sidebarClose.focus({ preventScroll: true });
+      });
+
+      sidebarClose.addEventListener('click', () => {
+        setNavigationOpen(false);
+        menuButton.focus({ preventScroll: true });
+      });
+
+      scrim.addEventListener('click', () => {
+        setNavigationOpen(false);
+        menuButton.focus({ preventScroll: true });
+      });
+
+      tocLinks.forEach((link) => {
+        link.addEventListener('click', () => {
+          setActiveLink(link.getAttribute('href').slice(1));
+          setNavigationOpen(false);
+        });
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && body.classList.contains('nav-open')) {
+          setNavigationOpen(false);
+          menuButton.focus({ preventScroll: true });
+        }
+      });
+
+      const media = window.matchMedia('(min-width: 901px)');
+      const handleMediaChange = (event) => {
+        if (event.matches) setNavigationOpen(false);
+      };
+      if (media.addEventListener) {
+        media.addEventListener('change', handleMediaChange);
+      } else {
+        media.addListener(handleMediaChange);
+      }
+
+      const observer = new IntersectionObserver((entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length) setActiveLink(visible[0].target.id);
+      }, {
+        rootMargin: '-18% 0px -68% 0px',
+        threshold: [0, 0.1, 0.5]
+      });
+
+      sections.forEach((section) => observer.observe(section));
+
+      if (window.location.hash && document.querySelector(window.location.hash)) {
+        setActiveLink(window.location.hash.slice(1));
+      }
+    })();
+  </script>
+</body>
+</html>

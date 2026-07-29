@@ -1,0 +1,9 @@
+EELS-ZEST
+Zero-loss Estimation and Sparse Thermometry
+Version: 2.0.0
+Author: Ruilin Mao
+Affiliation: International Center for Quantum Materials (ICQM), Peking University
+License: GPL-3.0-only
+Release policy: attention hard-BE + non-attention soft source intensity
+Release date: 2026-07-29
+Bundled data: examples/data/example_data.mat

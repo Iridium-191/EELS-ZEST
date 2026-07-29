@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EELS-ZEST Documentation</title>
+  <meta name="description" content="EELS-ZEST documentation for zero-loss estimation, sparse phonon-mode source-intensity reconstruction, and attention-guided thermometry.">
+  <meta name="author" content="Ruilin Mao, International Center for Quantum Materials (ICQM), Peking University">
+  <style>
+    :root {
+      --page: #eef1f3;
+      --paper: #ffffff;
+      --soft: #f5f7f8;
+      --ink: #1f282e;
+      --muted: #66747c;
+      --line: #d8dfe3;
+      --blue: #176b8f;
+      --blue-dark: #0f4f6c;
+      --green: #2e735d;
+      --amber: #9b681b;
+      --side: #252b2f;
+      --side-hover: #313a3f;
+      --side-text: #e9eef0;
+      --side-muted: #aeb9be;
+      --code: #f1f4f5;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 24px;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--page);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 16px;
+      line-height: 1.62;
+    }
+
+    body.nav-open { overflow: hidden; }
+
+    a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    a:focus-visible,
+    button:focus-visible {
+      outline: 3px solid #79b8d5;
+      outline-offset: 3px;
+    }
+
+    .skip-link {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
+      padding: 8px 12px;
+      color: #fff;
+      background: var(--blue-dark);
+      transform: translateY(-160%);
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .layout {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 290px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      color: var(--side-text);
+      background: var(--side);
+      border-right: 1px solid #15191b;
+      z-index: 30;
+    }
+
+    .brand {
+      padding: 24px 22px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand img {
+      width: 58px;
+      height: 58px;
+      object-fit: contain;
+      flex: 0 0 auto;
+      background: #fff;
+      border-radius: 6px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      color: #fff;
+      font-size: 24px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .brand p {
+      margin: 5px 0 0;
+      color: var(--side-muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .version {
+      margin: 16px 22px 7px;
+      padding: 7px 9px;
+      color: #e3f3f8;
+      background: rgba(23, 107, 143, 0.32);
+      border: 1px solid rgba(163, 213, 233, 0.2);
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    .nav-title {
+      padding: 16px 22px 7px;
+      color: var(--side-muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .toc {
+      list-style: none;
+      margin: 0;
+      padding: 0 0 28px;
+    }
+
+    .toc a {
+      display: block;
+      padding: 8px 22px;
+      color: var(--side-text);
+      border-left: 4px solid transparent;
+      font-size: 14px;
+    }
+
+    .toc a:hover {
+      color: #fff;
+      background: var(--side-hover);
+      text-decoration: none;
+    }
+
+    .toc a.active {
+      color: #fff;
+      background: #304550;
+      border-left-color: #6fb4d0;
+      font-weight: 700;
+    }
+
+    .nav-scrim,
+    .sidebar-close { display: none; }
+
+    .sidebar-close {
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      background: #243842;
+      border: 1px solid rgba(255, 255, 255, 0.42);
+      border-radius: 4px;
+      font-size: 21px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .content-shell {
+      min-width: 0;
+      background: var(--paper);
+    }
+
+    .topbar {
+      min-height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 0 34px;
+      color: var(--muted);
+      background: var(--soft);
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .menu-button {
+      display: none;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      font-size: 21px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    main {
+      width: min(100%, 1080px);
+      padding: 44px 58px 72px;
+    }
+
+    section,
+    header[id] {
+      scroll-margin-top: 22px;
+    }
+
+    .doc-header {
+      padding-bottom: 30px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .doc-header h1 {
+      margin: 0;
+      font-size: 42px;
+      font-weight: 600;
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    .doc-header p {
+      max-width: 820px;
+      margin: 15px 0 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    section {
+      padding-top: 26px;
+      margin-top: 18px;
+    }
+
+    h2 {
+      margin: 0 0 15px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 22px 0 8px;
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+
+    p { margin: 12px 0; }
+
+    ul,
+    ol { padding-left: 24px; }
+
+    li { margin: 5px 0; }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+
+    .feature {
+      min-width: 0;
+      padding: 15px 16px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #fbfcfc;
+    }
+
+    .feature strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .feature p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .note {
+      margin: 18px 0;
+      padding: 14px 16px;
+      border-left: 4px solid var(--amber);
+      background: #fff8ea;
+    }
+
+    code,
+    pre {
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      font-size: 14px;
+    }
+
+    code {
+      padding: 1px 4px;
+      background: var(--code);
+      border-radius: 3px;
+    }
+
+    pre {
+      max-width: 100%;
+      overflow: auto;
+      margin: 14px 0;
+      padding: 15px 17px;
+      background: var(--code);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      line-height: 1.46;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+    }
+
+    table {
+      width: 100%;
+      margin: 16px 0;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: #eef3f5;
+      font-weight: 700;
+    }
+
+    .figure-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin: 16px 0;
+    }
+
+    .figure-grid a {
+      display: block;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .figure-grid a:hover {
+      border-color: #7baabd;
+      text-decoration: none;
+    }
+
+    .figure-grid img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      margin-top: 48px;
+      padding-top: 22px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      font-size: 14px;
+    }
+
+    @media (max-width: 980px) {
+      .feature-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: min(310px, 86vw);
+        transform: translateX(-105%);
+        transition: transform 180ms ease;
+        box-shadow: 8px 0 24px rgba(0, 0, 0, 0.24);
+      }
+
+      body.nav-open .sidebar { transform: translateX(0); }
+
+      .nav-scrim {
+        position: fixed;
+        inset: 0;
+        display: block;
+        visibility: hidden;
+        opacity: 0;
+        z-index: 20;
+        padding: 0;
+        background: rgba(11, 18, 22, 0.48);
+        border: 0;
+        transition: opacity 180ms ease, visibility 180ms ease;
+      }
+
+      body.nav-open .nav-scrim {
+        visibility: visible;
+        opacity: 1;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        padding: 8px 18px;
+      }
+
+      .menu-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+
+      .sidebar .brand { padding-right: 72px; }
+
+      body.nav-open .sidebar-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        z-index: 1;
+        display: inline-flex;
+      }
+
+      .topbar-right { display: none; }
+
+      main { padding: 30px 22px 54px; }
+
+      .doc-header h1 { font-size: 34px; }
+    }
+
+    @media (max-width: 650px) {
+      .figure-grid { grid-template-columns: 1fr; }
+
+      .footer {
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .sidebar,
+      .nav-scrim { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar" aria-label="Documentation navigation">
+      <button class="sidebar-close" type="button" aria-label="Close navigation" title="Close navigation">&#10005;</button>
+      <div class="brand">
+        <div class="brand-row">
+          <img src="logo.png" alt="EELS-ZEST logo">
+          <div>
+            <h1>EELS-ZEST</h1>
+            <p>Zero-loss Estimation<br>and Sparse Thermometry</p>
+          </div>
+        </div>
+      </div>
+      <div class="version">Version 2.0.0</div>
+      <div class="nav-title">Contents</div>
+      <nav>
+        <ul class="toc">
+          <li><a class="active" href="#overview">1. Overview</a></li>
+          <li><a href="#installation">2. Installation</a></li>
+          <li><a href="#quick-start">3. Quick start</a></li>
+          <li><a href="#workflow">4. Workflow</a></li>
+          <li><a href="#gui">5. GUI</a></li>
+          <li><a href="#api">6. Script API</a></li>
+          <li><a href="#outputs">7. Outputs</a></li>
+          <li><a href="#theory">8. Theory</a></li>
+          <li><a href="#example">9. Example figures</a></li>
+          <li><a href="#citation">10. Citation and license</a></li>
+          <li><a href="#terminology">11. Terminology</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <button class="nav-scrim" type="button" aria-label="Close navigation" tabindex="-1"></button>
+
+    <div class="content-shell">
+      <div class="topbar">
+        <div class="topbar-left">
+          <button class="menu-button" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar" title="Open navigation">&#9776;</button>
+          <span><a href="#overview">EELS-ZEST documentation</a> / <code>v2.0.0</code></span>
+        </div>
+        <div class="topbar-right">MATLAB workflow for STEM-EELS</div>
+      </div>
+
+      <main id="main-content">
+        <header class="doc-header" id="overview">
+          <p class="eyebrow">STEM-EELS analysis toolbox</p>
+          <h1>EELS-ZEST</h1>
+          <p>
+            Zero-loss peak estimation, sparse phonon-mode source-intensity
+            reconstruction, and attention-guided Bose-Einstein thermometry for
+            spectra and datacubes.
+          </p>
+        </header>
+
+        <section>
+          <h2>1. Overview</h2>
+          <p>
+            Version 2.0 separates spectral reconstruction from temperature
+            inference. The complete spectrum remains in the fit, while only
+            reliable paired gain/loss evidence controls thermometry.
+          </p>
+          <div class="feature-grid">
+            <div class="feature">
+              <strong>Stage 1</strong>
+              <p>Fit the complete ZLP and reconstruct sparse vibrational signal.</p>
+            </div>
+            <div class="feature">
+              <strong>Stage 2</strong>
+              <p>Apply hard BE constraints to paired attention modes and independent soft source intensities elsewhere.</p>
+            </div>
+            <div class="feature">
+              <strong>Diagnostics</strong>
+              <p>Inspect residuals, sparse source intensities, BE linearity, cost valley, uncertainty, and maps.</p>
+            </div>
+          </div>
+          <div class="note">
+            On an aligned energy axis, the fitted total ZLP is used as the signal
+            kernel and its center remains at <code>0 meV</code>.
+          </div>
+        </section>
+
+        <section id="installation">
+          <h2>2. Installation</h2>
+          <p>Add the toolbox folder to the MATLAB path:</p>
+          <pre><code>addpath('EELS-ZEST');</code></pre>
+          <p>
+            Optimization Toolbox is required. Parallel Computing Toolbox is used
+            when datacube parallel processing is enabled.
+          </p>
+        </section>
+
+        <section id="quick-start">
+          <h2>3. Quick Start</h2>
+          <h3>Launch the GUI</h3>
+          <pre><code>app = run_eels_zest;</code></pre>
+
+          <h3>Fit one spectrum</h3>
+          <pre><code>settings = struct();
+settings.run_stage2 = true;
+settings.crop_range = [-250, 250];
+settings.stage2_temperature_algorithm = 'grid_scan';
+
+result = eels_fit_spectrum(energy_meV, spectrum, settings);</code></pre>
+
+          <h3>Fit the bundled example</h3>
+          <pre><code>settings = struct();
+settings.run_stage2 = true;
+settings.crop_range = [-250, 250];
+settings.datacube_sample_strategy = 'all';
+settings.datacube_parallel_enabled = true;
+settings.datacube_parallel_workers = 16;
+settings.test_output_dir = fullfile(pwd, 'eels_zest_output');
+
+input_file = fullfile('examples', 'data', 'example_data.mat');
+cuberes = eels_fit_datacube(input_file, settings);</code></pre>
+
+          <h3>Run the prepared workflows</h3>
+          <pre><code>run(fullfile('examples', 'zest_datacube_full_stage1.m'));
+run(fullfile('examples', 'zest_datacube_full_stage2_parallel.m'));</code></pre>
+        </section>
+
+        <section id="workflow">
+          <h2>4. Workflow</h2>
+          <ol>
+            <li>Load a `.mat` or `.dm3` spectrum image.</li>
+            <li>Align the ZLP to <code>0 meV</code> when needed.</li>
+            <li>Apply rank-limited SVD/PCA denoising.</li>
+            <li>Crop to the useful energy interval, normally <code>[-250, 250] meV</code>.</li>
+            <li>Run Stage 1 and inspect ZLP, signal reconstruction, residual, R2, and NRMSE.</li>
+            <li>Run Stage 2 where paired gain/loss evidence supports thermometry.</li>
+            <li>Inspect hard-pair BE linearity, the temperature cost valley, uncertainty, and reliability.</li>
+            <li>Export fitted spectra, sparse source-intensity products, maps, and diagnostics.</li>
+          </ol>
+        </section>
+
+        <section id="gui">
+          <h2>5. GUI</h2>
+          <table>
+            <thead>
+              <tr><th>Page</th><th>Purpose</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Data</td><td>Load data, inspect maps, align ZLP, run SVD denoising, select an ROI, and run RL conversion after fitting.</td></tr>
+              <tr><td>Stage 1</td><td>Reconstruct one pixel or a complete datacube with fitted ZLP and sparse phonon-mode source intensities.</td></tr>
+              <tr><td>Stage 2</td><td>Reuse Stage 1 and perform attention-guided thermometry.</td></tr>
+              <tr><td>Phonon Intensity</td><td>Build signed source-intensity cubes, integral maps, NMF components, and clusters.</td></tr>
+            </tbody>
+          </table>
+          <p>
+            Start with one representative pixel. Once its decomposition and
+            residual are satisfactory, run the complete datacube in serial or
+            parallel mode.
+          </p>
+          <p><a href="docs/GUI_TOOLBOX_GUIDE.md">Open the GUI guide</a></p>
+        </section>
+
+        <section id="api">
+          <h2>6. Script API</h2>
+          <table>
+            <thead>
+              <tr><th>Entry point</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>run_eels_zest</code></td><td>Launch the GUI.</td></tr>
+              <tr><td><code>eels_fit_spectrum</code></td><td>Fit one spectrum using Stage 1 or Stage 1 + Stage 2.</td></tr>
+              <tr><td><code>eels_fit_datacube</code></td><td>Fit a datacube from a file-backed input.</td></tr>
+              <tr><td><code>examples/zest_datacube_full_stage1.m</code></td><td>Run the bundled example through Stage 1.</td></tr>
+              <tr><td><code>examples/zest_datacube_full_stage2_parallel.m</code></td><td>Run the bundled example through Stage 1 and Stage 2.</td></tr>
+              <tr><td><code>promote_stage1_to_stage2</code></td><td>Reuse a single-spectrum Stage 1 result.</td></tr>
+              <tr><td><code>promote_datacube_stage1_to_stage2</code></td><td>Reuse a Stage 1 datacube result.</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="outputs">
+          <h2>7. Outputs</h2>
+          <h3>Single-spectrum fields</h3>
+          <ul>
+            <li><code>raw_data</code>, <code>fitted_spectrum</code>, <code>residual</code></li>
+            <li><code>zlp_only</code>, <code>zlp_components</code>, <code>vib_only</code></li>
+            <li>sparse Stokes and anti-Stokes source-intensity arrays</li>
+            <li><code>metrics</code>, <code>stage2</code>, <code>T_fit</code>, <code>T_uncertainty</code>, <code>reliability_score</code></li>
+          </ul>
+
+          <h3>Datacube fields</h3>
+          <ul>
+            <li><code>R2_map</code>, <code>NRMSE_map</code>, <code>fit_status_map</code></li>
+            <li><code>T_map_raw</code>, <code>T_map_repaired</code>, <code>T_map_spatial_refined</code></li>
+            <li><code>T_uncertainty_map</code>, <code>reliability_score_map</code>, <code>attention_score_map</code></li>
+            <li><code>warning_map</code>, <code>bad_pixel_mask</code>, <code>interface_mask</code></li>
+          </ul>
+        </section>
+
+        <section id="theory">
+          <h2>8. Theory</h2>
+          <p>
+            The method documentation covers the ZLP model, sparse convolution,
+            hard/soft source-intensity partition, loss terms, paired attention
+            score, BE linearity, temperature profile, uncertainty, and
+            reliability.
+          </p>
+          <ul>
+            <li><a href="docs/theory.html">Rendered theory and methods</a></li>
+            <li><a href="docs/LOSS_AND_ATTENTION_THEORY_v1.3.md">Loss and attention reference</a></li>
+            <li><a href="README_zh-CN.md">Chinese README</a></li>
+          </ul>
+        </section>
+
+        <section id="example">
+          <h2>9. Example Figures</h2>
+          <p>
+            The bundled case demonstrates ZLP/signal decomposition, sparse
+            phonon-mode source intensity, phonon-profile comparison, paired
+            attention windows, BE linearity, and the temperature cost valley.
+          </p>
+          <div class="figure-grid">
+            <a href="docs/example_data_figures/Figure1_ZLP_sparse_reconstruction.svg" aria-label="Open Figure 1 SVG">
+              <img src="docs/example_data_figures/Figure1_ZLP_sparse_reconstruction_preview.png" alt="ZLP and sparse signal reconstruction">
+            </a>
+            <a href="docs/example_data_figures/Figure2_attention_BE_thermometry.svg" aria-label="Open Figure 2 SVG">
+              <img src="docs/example_data_figures/Figure2_attention_BE_thermometry_preview.png" alt="Attention-guided Bose-Einstein thermometry">
+            </a>
+          </div>
+          <ul>
+            <li><a href="docs/example_data_figures/example_figure_summary.txt">Fit and figure summary</a></li>
+            <li><a href="docs/example_data_figures/export_example_figure_data.m">Data export script</a></li>
+            <li><a href="docs/example_data_figures/plot_example_figures.m">Figure reproduction script</a></li>
+          </ul>
+        </section>
+
+        <section id="citation">
+          <h2>10. Citation And License</h2>
+          <p>
+            EELS-ZEST is developed by <strong>Ruilin Mao</strong>,
+            International Center for Quantum Materials (ICQM), Peking
+            University.
+          </p>
+          <p>
+            Research users are encouraged to notify the author and cite the
+            software in resulting publications. Machine-readable citation
+            metadata is provided in <a href="CITATION.cff"><code>CITATION.cff</code></a>.
+          </p>
+          <p>
+            EELS-ZEST is licensed under the
+            <strong>GNU General Public License version 3 only</strong>
+            (<code>GPL-3.0-only</code>). See the complete
+            <a href="LICENSE">license text</a> and <a href="NOTICE.md">project notice</a>.
+          </p>
+        </section>
+
+        <section id="terminology">
+          <h2>11. Terminology And Field Names</h2>
+          <p>
+            The fitted coefficients are described here as <strong>sparse
+            phonon-mode source intensities</strong>. They are nonnegative
+            source-space weights before convolution with the fitted ZLP kernel,
+            rather than a directly calibrated phonon DOS.
+          </p>
+          <p>
+            For compatibility with existing MATLAB result files, the code
+            abbreviates <strong>phonon-mode intensity</strong> as
+            <strong>PM</strong>. The corresponding fields are
+            <code>PM_stokes</code>, <code>PM_antistokes</code>, and
+            <code>EM_final</code>.
+          </p>
+        </section>
+
+        <div class="footer">
+          <span>Ruilin Mao · ICQM, Peking University · GPL-3.0-only</span>
+          <span><a href="#overview">Back to top</a></span>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const body = document.body;
+      const menuButton = document.querySelector('.menu-button');
+      const sidebarClose = document.querySelector('.sidebar-close');
+      const scrim = document.querySelector('.nav-scrim');
+      const tocLinks = Array.from(document.querySelectorAll('.toc a[href^="#"]'));
+      const sections = tocLinks
+        .map((link) => document.querySelector(link.getAttribute('href')))
+        .filter(Boolean);
+
+      const setNavigationOpen = (open) => {
+        body.classList.toggle('nav-open', open);
+        menuButton.setAttribute('aria-expanded', String(open));
+      };
+
+      const setActiveLink = (id) => {
+        tocLinks.forEach((link) => {
+          const active = link.getAttribute('href') === `#${id}`;
+          link.classList.toggle('active', active);
+          if (active) {
+            link.setAttribute('aria-current', 'location');
+          } else {
+            link.removeAttribute('aria-current');
+          }
+        });
+      };
+
+      menuButton.addEventListener('click', () => {
+        setNavigationOpen(true);
+        sidebarClose.focus({ preventScroll: true });
+      });
+
+      sidebarClose.addEventListener('click', () => {
+        setNavigationOpen(false);
+        menuButton.focus({ preventScroll: true });
+      });
+
+      scrim.addEventListener('click', () => {
+        setNavigationOpen(false);
+        menuButton.focus({ preventScroll: true });
+      });
+
+      tocLinks.forEach((link) => {
+        link.addEventListener('click', () => {
+          setActiveLink(link.getAttribute('href').slice(1));
+          setNavigationOpen(false);
+        });
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && body.classList.contains('nav-open')) {
+          setNavigationOpen(false);
+          menuButton.focus({ preventScroll: true });
+        }
+      });
+
+      window.matchMedia('(min-width: 901px)').addEventListener('change', (event) => {
+        if (event.matches) setNavigationOpen(false);
+      });
+
+      const observer = new IntersectionObserver((entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length) setActiveLink(visible[0].target.id);
+      }, {
+        rootMargin: '-18% 0px -68% 0px',
+        threshold: [0, 0.1, 0.5]
+      });
+
+      sections.forEach((section) => observer.observe(section));
+
+      if (window.location.hash && document.querySelector(window.location.hash)) {
+        setActiveLink(window.location.hash.slice(1));
+      }
+    })();
+  </script>
+</body>
+</html>

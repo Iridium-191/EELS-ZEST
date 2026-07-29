@@ -1,0 +1,18 @@
+EELS-ZEST 2.0 example figure data
+input_file: examples/data/example_data.mat
+phonon_GaN_wurtzite_file: mp-804.json (external PDOS dependency)
+phonon_GaN_zincblende_file: mp-830.json (external PDOS dependency)
+phonon_GaN_rocksalt_file: mp-2853.json (external PDOS dependency)
+selected_pixel_yx: [36, 22]
+svd_rank: 12
+energy_crop_meV: [-250.000, 250.000]
+T_fit_K: 815
+reliability: 0.97644671
+deconv_available: 1
+deconv_R2_weighted: 0.99958848
+deconv_NRMSE_weighted: 0.020285902
+be_available: 1
+be_R2_origin: 1
+GaN_DOS_primary: wurtzite GaN, Materials Project local JSON mp-804, point group 6mm
+GaN_DOS_reference: zincblende GaN local JSON mp-830, point group -43m
+figure_data: example_figure_data.mat
