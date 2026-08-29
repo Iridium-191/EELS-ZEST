@@ -284,6 +284,7 @@ classdef EELS_PearsonSparse_FullFit
             if ~isfield(settings, 'datacube_parallel_workers'), settings.datacube_parallel_workers = 0; end
             if ~isfield(settings, 'datacube_parallel_min_pixels'), settings.datacube_parallel_min_pixels = 8; end
             if ~isfield(settings, 'datacube_parallel_chunks'), settings.datacube_parallel_chunks = 0; end
+            if ~isfield(settings, 'datacube_parallel_phase_batch_size'), settings.datacube_parallel_phase_batch_size = 0; end
             if ~isfield(settings, 'datacube_parallel_warm_start_within_chunk'), settings.datacube_parallel_warm_start_within_chunk = false; end
             if ~isfield(settings, 'datacube_fit_retries'), settings.datacube_fit_retries = 1; end
             if ~isfield(settings, 'datacube_retry_with_strict_nnls'), settings.datacube_retry_with_strict_nnls = true; end
@@ -382,6 +383,52 @@ classdef EELS_PearsonSparse_FullFit
             if ~isfield(settings, 'spatial_region_post_smooth_max_step_K'), settings.spatial_region_post_smooth_max_step_K = 75; end
             if ~isfield(settings, 'spatial_region_post_smooth_min_region_p90_K'), settings.spatial_region_post_smooth_min_region_p90_K = 90; end
             if ~isfield(settings, 'spatial_region_post_smooth_min_global_p90_K'), settings.spatial_region_post_smooth_min_global_p90_K = 90; end
+            % v2.1 hierarchical ZLP model and ZLP-guided spatial inference.
+            if ~isfield(settings, 'stage1_hierarchical_enabled'), settings.stage1_hierarchical_enabled = true; end
+            if ~isfield(settings, 'stage1_cluster_count'), settings.stage1_cluster_count = 0; end
+            if ~isfield(settings, 'stage1_cluster_k_range'), settings.stage1_cluster_k_range = [1, 4]; end
+            if ~isfield(settings, 'stage1_cluster_membership_min'), settings.stage1_cluster_membership_min = 0.60; end
+            if ~isfield(settings, 'stage1_cluster_min_pixels'), settings.stage1_cluster_min_pixels = 20; end
+            if ~isfield(settings, 'stage1_cluster_min_fraction'), settings.stage1_cluster_min_fraction = 0.03; end
+            if ~isfield(settings, 'stage1_cluster_random_seed'), settings.stage1_cluster_random_seed = 17; end
+            if ~isfield(settings, 'stage1_cluster_max_pca_components'), settings.stage1_cluster_max_pca_components = 6; end
+            if ~isfield(settings, 'stage1_cluster_core_window_bounds_meV'), settings.stage1_cluster_core_window_bounds_meV = [8, 18]; end
+            if ~isfield(settings, 'stage1_cluster_template_score_min'), settings.stage1_cluster_template_score_min = 0.70; end
+            if ~isfield(settings, 'stage1_cluster_label_switch_margin'), settings.stage1_cluster_label_switch_margin = 0.15; end
+            if ~isfield(settings, 'stage1_cluster_template_cost_fraction'), settings.stage1_cluster_template_cost_fraction = 0.05; end
+            if ~isfield(settings, 'stage1_cluster_center_channels'), settings.stage1_cluster_center_channels = 1; end
+            if ~isfield(settings, 'stage1_cluster_width_rel_floor'), settings.stage1_cluster_width_rel_floor = 0.03; end
+            if ~isfield(settings, 'stage1_cluster_width_rel_cap'), settings.stage1_cluster_width_rel_cap = 0.08; end
+            if ~isfield(settings, 'stage1_cluster_shape_rel_floor'), settings.stage1_cluster_shape_rel_floor = 0.05; end
+            if ~isfield(settings, 'stage1_cluster_shape_rel_cap'), settings.stage1_cluster_shape_rel_cap = 0.15; end
+            if ~isfield(settings, 'stage1_cluster_mad_multiplier'), settings.stage1_cluster_mad_multiplier = 2.5; end
+            if ~isfield(settings, 'stage1_cluster_soft_constraints_enabled'), settings.stage1_cluster_soft_constraints_enabled = true; end
+            if ~isfield(settings, 'stage1_spatial_zlp_enabled'), settings.stage1_spatial_zlp_enabled = true; end
+            if ~isfield(settings, 'stage1_spatial_zlp_weight'), settings.stage1_spatial_zlp_weight = 0.03; end
+            if ~isfield(settings, 'stage1_spatial_zlp_iterations'), settings.stage1_spatial_zlp_iterations = 2; end
+            if ~isfield(settings, 'stage1_spatial_zlp_huber_delta'), settings.stage1_spatial_zlp_huber_delta = 1.5; end
+            if ~isfield(settings, 'stage1_spatial_zlp_second_pass_fraction'), settings.stage1_spatial_zlp_second_pass_fraction = 0.35; end
+            if ~isfield(settings, 'stage1_zlp_interface_enabled'), settings.stage1_zlp_interface_enabled = true; end
+            if ~isfield(settings, 'stage1_zlp_interface_score_threshold'), settings.stage1_zlp_interface_score_threshold = 3.5; end
+            if ~isfield(settings, 'stage1_zlp_interface_coherent_score_threshold'), settings.stage1_zlp_interface_coherent_score_threshold = 1.25; end
+            if ~isfield(settings, 'stage1_zlp_interface_min_coherent_neighbors'), settings.stage1_zlp_interface_min_coherent_neighbors = 2; end
+            if ~isfield(settings, 'stage1_zlp_interface_distance_ratio_min'), settings.stage1_zlp_interface_distance_ratio_min = 1.6; end
+            if ~isfield(settings, 'stage1_zlp_interface_probability_weight'), settings.stage1_zlp_interface_probability_weight = 0.75; end
+            if ~isfield(settings, 'stage1_hierarchical_template_max_iter'), settings.stage1_hierarchical_template_max_iter = 10; end
+            if ~isfield(settings, 'stage1_hierarchical_spatial_max_iter'), settings.stage1_hierarchical_spatial_max_iter = 7; end
+            if ~isfield(settings, 'stage1_hierarchy_context'), settings.stage1_hierarchy_context = struct(); end
+            if ~isfield(settings, 'stage2_spatial_map_enabled'), settings.stage2_spatial_map_enabled = true; end
+            if ~isfield(settings, 'stage2_spatial_map_weight'), settings.stage2_spatial_map_weight = 0.08; end
+            if ~isfield(settings, 'stage2_spatial_map_huber_scale_K'), settings.stage2_spatial_map_huber_scale_K = 40; end
+            if ~isfield(settings, 'stage2_spatial_map_truncation_K'), settings.stage2_spatial_map_truncation_K = 120; end
+            if ~isfield(settings, 'stage2_spatial_map_step_K'), settings.stage2_spatial_map_step_K = 5; end
+            if ~isfield(settings, 'stage2_spatial_map_iterations'), settings.stage2_spatial_map_iterations = 4; end
+            if ~isfield(settings, 'stage2_spatial_map_cluster_floor'), settings.stage2_spatial_map_cluster_floor = 0.15; end
+            if ~isfield(settings, 'stage2_spatial_map_anchor_reliability'), settings.stage2_spatial_map_anchor_reliability = 0.75; end
+            if ~isfield(settings, 'stage2_spatial_map_valid_reliability'), settings.stage2_spatial_map_valid_reliability = 0.25; end
+            if ~isfield(settings, 'stage2_spatial_map_max_uncertainty_K'), settings.stage2_spatial_map_max_uncertainty_K = 420; end
+            if ~isfield(settings, 'stage2_spatial_map_min_neighbor_support'), settings.stage2_spatial_map_min_neighbor_support = 2; end
+            if ~isfield(settings, 'stage2_zlp_guided_inference_enabled'), settings.stage2_zlp_guided_inference_enabled = true; end
             if ~isfield(settings, 'stage1_speed_profile'), settings.stage1_speed_profile = 'v20_fast'; end
             if ~isfield(settings, 'stage1_rounds')
                 switch lower(char(string(settings.stage1_speed_profile)))
@@ -396,7 +443,8 @@ classdef EELS_PearsonSparse_FullFit
                             struct('name', 'round2_dense_v20fast', 'em_step_meV', 4, 'lambda_be_soft', 5e-4, 'max_nonlinear_iter', 28)];
                 end
             end
-            settings.stage2_version = '2.0-attention-hardBE-softPM-stage2';
+            settings.software_version = '2.1.0';
+            settings.stage2_version = '2.1-attention-hardBE-soft-intensity-zlp-guided';
             settings.stage2_temperature_algorithm = 'grid_scan';
             settings.stage2_scan_inner_solver = 'lsqlin';
             settings.stage2_pm_smooth_weight = max(settings.stage2_pm_smooth_weight, 1.2e-3);
@@ -543,70 +591,27 @@ classdef EELS_PearsonSparse_FullFit
                 'labels', zeros(1, np), 'class_score', NaN(1, np), 'class_counts', np);
             cuberes.stage2_attention_class_info = class_info;
             timer0 = tic;
-            pixel_time = NaN(1, np);
             [use_parallel, parallel_workers, parallel_message] = EELS_PearsonSparse_FullFit.datacube_parallel_state(settings, np);
+            parallel_pool_cleanup = []; %#ok<NASGU>
             if use_parallel
                 fprintf('Stage2 reuse parallel enabled: %d workers, %d pixels\n', parallel_workers, np);
-                EELS_PearsonSparse_FullFit.ensure_parallel_pool(parallel_workers);
-                progress_settings = settings;
-                progress_settings.datacube_parallel_effective_workers = max(1, round(parallel_workers));
-                parallel_pool_cleanup = []; %#ok<NASGU>
                 if isfield(settings, 'close_parallel_pool_after_run') && settings.close_parallel_pool_after_run
                     parallel_pool_cleanup = onCleanup(@()EELS_PearsonSparse_FullFit.close_parallel_pool());
                 end
-                worker_settings = settings;
-                worker_settings.datacube_progress_callback = [];
-                worker_settings.datacube_stop_callback = [];
-                progress_queue = [];
-                try
-                    progress_queue = parallel.pool.DataQueue;
-                    afterEach(progress_queue, @(t)EELS_PearsonSparse_FullFit.parallel_progress_update( ...
-                        progress_settings, t, np, timer0, 0, []));
-                catch
-                    progress_queue = [];
-                end
-                sample_pixels = stage1_cuberes.sample_pixels;
-                stage1_results = stage1_cuberes.results;
-                stage2_results = cell(1, np);
-                parallel_pixel_time = NaN(1, np);
-                parfor ii = 1:np
-                    t1 = tic;
-                    old_res = stage1_results{ii};
-                    if isstruct(old_res) && ~isfield(old_res, 'error')
-                        try
-                            pixel_settings = worker_settings;
-                            stage2_results{ii} = EELS_PearsonSparse_FullFit.promote_stage1_to_stage2(old_res, pixel_settings);
-                        catch ME
-                            stage2_results{ii} = struct('error', ME.message, 'pixel_index', sample_pixels(ii));
-                        end
-                    else
-                        stage2_results{ii} = old_res;
-                    end
-                    parallel_pixel_time(ii) = toc(t1);
-                    if ~isempty(progress_queue)
-                        send(progress_queue, parallel_pixel_time(ii));
-                    end
-                end
-                cuberes.results = stage2_results;
-                pixel_time = parallel_pixel_time;
             else
                 if settings.datacube_parallel_enabled && ~isempty(parallel_message)
                     fprintf('Stage2 reuse parallel disabled: %s\n', parallel_message);
                 end
-                for ii = 1:np
-                    t1 = tic;
-                    old_res = stage1_cuberes.results{ii};
-                    if isstruct(old_res) && ~isfield(old_res, 'error')
-                        try
-                            pixel_settings = settings;
-                            cuberes.results{ii} = EELS_PearsonSparse_FullFit.promote_stage1_to_stage2(old_res, pixel_settings);
-                        catch ME
-                            cuberes.results{ii} = struct('error', ME.message, 'pixel_index', stage1_cuberes.sample_pixels(ii));
-                        end
-                    end
-                    pixel_time(ii) = toc(t1);
-                    EELS_PearsonSparse_FullFit.notify_progress(settings, ii, np, toc(timer0), pixel_time(1:ii), 'Stage2 reuse');
-                end
+            end
+            [cuberes.results, pixel_time] = EELS_PearsonSparse_FullFit.promote_stage1_results_datacube( ...
+                cuberes.results, cuberes.sample_pixels, settings, use_parallel, parallel_workers);
+            if use_parallel && isfield(settings, 'close_parallel_pool_after_run') && settings.close_parallel_pool_after_run
+                EELS_PearsonSparse_FullFit.notify_progress(settings, np, np, toc(timer0), pixel_time, ...
+                    'releasing parallel workers');
+                EELS_PearsonSparse_FullFit.close_parallel_pool();
+                parallel_pool_cleanup = [];
+                EELS_PearsonSparse_FullFit.notify_progress(settings, np, np, toc(timer0), pixel_time, ...
+                    'parallel workers released');
             end
             cuberes = EELS_PearsonSparse_FullFit.rebuild_datacube_maps_from_results(cuberes, settings, pixel_time, timer0, true);
         end
@@ -835,7 +840,7 @@ classdef EELS_PearsonSparse_FullFit
             result = struct();
             result.enabled = settings.run_stage2;
             result.status = 'disabled';
-            result.message = 'Stage 2 disabled; v2.0 attention hard-BE + soft source-intensity fitting is available when settings.run_stage2 is true.';
+            result.message = 'Stage 2 disabled; v2.1 attention thermometry and joint spatial temperature MAP are available when settings.run_stage2 is true.';
             if isfield(stage1_result, 'T_soft')
                 result.stage1_T_soft_seed = stage1_result.T_soft;
             else
@@ -962,7 +967,7 @@ classdef EELS_PearsonSparse_FullFit
 
             stage2_valley = EELS_PearsonSparse_FullFit.stage2_cost_valley(scan.T_grid, scan.cost_grid_smooth);
             result.status = 'ok';
-            result.message = 'Stage 2 v2.0 attention hard-BE + soft source intensity: only attention-paired mode energies constrain temperature; remaining centers fit independent source intensities.';
+            result.message = 'Stage 2 v2.1: only attention-paired mode energies constrain temperature; remaining centers fit independent source intensities, and datacubes can use the raw temperature cost in a joint spatial MAP.';
             result.temperature_algorithm = 'grid_scan';
             result.temperature_policy = 'v20_attention_hardBE_softPM';
             result.T_fit = best.T_fit;
@@ -1137,6 +1142,18 @@ classdef EELS_PearsonSparse_FullFit
             pixels = EELS_PearsonSparse_FullFit.pick_datacube_pixels(ny, nx, settings);
             np = numel(pixels);
             settings = EELS_PearsonSparse_FullFit.calibrate_datacube_stage1_sparse_pm(cube, ene, pixels, settings);
+            requested_stage2 = logical(settings.run_stage2);
+            full_spatial_sampling = np == ny .* nx && all(sort(pixels(:)) == (1:(ny .* nx)).');
+            hierarchy_active = logical(settings.stage1_hierarchical_enabled) && ...
+                np >= max(8, min(settings.stage1_cluster_min_pixels, ny .* nx));
+            fit_settings = settings;
+            if hierarchy_active
+                fit_settings.run_stage2 = false;
+                fit_settings.stage1_zlp_gain_heavy_init_enabled = false;
+                fit_settings.stage1_zlp_gain_tail_prior_enabled = false;
+                fit_settings.stage1_zlp_gain_asym_shape_prior_enabled = false;
+                fit_settings.stage1_hierarchy_context = struct();
+            end
             results = cell(1, np);
             R2_map = NaN(ny, nx);
             NRMSE_map = NaN(ny, nx);
@@ -1163,11 +1180,16 @@ classdef EELS_PearsonSparse_FullFit
             fit_status_map = zeros(ny, nx);
             run_timer = tic;
             [use_parallel, parallel_workers, parallel_message] = EELS_PearsonSparse_FullFit.datacube_parallel_state(settings, np);
+            datacube_pool_cleanup = []; %#ok<NASGU>
             if use_parallel
+                if isfield(settings, 'close_parallel_pool_after_run') && settings.close_parallel_pool_after_run
+                    datacube_pool_cleanup = onCleanup(@()EELS_PearsonSparse_FullFit.close_parallel_pool());
+                    fit_settings.close_parallel_pool_after_run = false;
+                end
                 if ~settings.silent
                     fprintf('datacube parallel enabled: %d workers, %d pixels\n', parallel_workers, np);
                 end
-                [results, pixel_time] = EELS_PearsonSparse_FullFit.fit_datacube_pixels_parallel(cube, ene, pixels, settings, parallel_workers);
+                [results, pixel_time] = EELS_PearsonSparse_FullFit.fit_datacube_pixels_parallel(cube, ene, pixels, fit_settings, parallel_workers);
                 progress_settings = settings;
                 progress_settings.datacube_parallel_effective_workers = parallel_workers;
                 EELS_PearsonSparse_FullFit.notify_progress(progress_settings, np, np, toc(run_timer), pixel_time, 'datacube parallel');
@@ -1175,7 +1197,29 @@ classdef EELS_PearsonSparse_FullFit
                 if settings.datacube_parallel_enabled && ~isempty(parallel_message)
                     fprintf('datacube parallel disabled: %s\n', parallel_message);
                 end
-                [results, pixel_time] = EELS_PearsonSparse_FullFit.fit_datacube_pixels_serial(cube, ene, pixels, settings, run_timer);
+                [results, pixel_time] = EELS_PearsonSparse_FullFit.fit_datacube_pixels_serial(cube, ene, pixels, fit_settings, run_timer);
+            end
+            hierarchy = EELS_PearsonSparse_FullFit.empty_stage1_hierarchy(ny, nx, np);
+            if hierarchy_active
+                EELS_PearsonSparse_FullFit.notify_progress(settings, 0, np, toc(run_timer), pixel_time, ...
+                    'v2.1 hierarchical ZLP clustering');
+                [results, hierarchy, hierarchy_time] = EELS_PearsonSparse_FullFit.hierarchical_stage1_datacube( ...
+                    ene, cube, pixels, results, fit_settings, full_spatial_sampling, use_parallel, parallel_workers);
+                pixel_time = pixel_time + hierarchy_time;
+                if requested_stage2
+                    EELS_PearsonSparse_FullFit.notify_progress(settings, 0, np, toc(run_timer), pixel_time, ...
+                        'v2.1 final Stage2 pass');
+                    [results, stage2_time] = EELS_PearsonSparse_FullFit.promote_stage1_results_datacube( ...
+                        results, pixels, settings, use_parallel, parallel_workers);
+                    pixel_time = pixel_time + stage2_time;
+                end
+            end
+            if use_parallel && settings.close_parallel_pool_after_run
+                EELS_PearsonSparse_FullFit.notify_progress(settings, 0, 1, toc(run_timer), pixel_time, ...
+                    'releasing parallel workers');
+                EELS_PearsonSparse_FullFit.close_parallel_pool();
+                EELS_PearsonSparse_FullFit.notify_progress(settings, 1, 1, toc(run_timer), pixel_time, ...
+                    'parallel workers released');
             end
             EELS_PearsonSparse_FullFit.notify_progress(settings, np, np, toc(run_timer), pixel_time, 'building maps and diagnostics');
             for ii = 1:np
@@ -1212,14 +1256,6 @@ classdef EELS_PearsonSparse_FullFit
                     signal_profile_cube(yy, xx, :) = EELS_PearsonSparse_FullFit.bin_energy_profile( ...
                         res.ene_corrected, max(res.raw_data_norm(:) - res.stage1.zlp_norm(:), 0), nbins);
                     fit_status_map(yy, xx) = 1;
-                    if settings.save_plots && ii <= min(np, settings.max_saved_spectrum_plots)
-                        EELS_PearsonSparse_FullFit.notify_progress(settings, np, np, toc(run_timer), pixel_time, ...
-                            sprintf('saving spectrum diagnostic %d/%d', ii, min(np, settings.max_saved_spectrum_plots)));
-                        fig = EELS_PearsonSparse_FullFit.plot_result(res, sprintf('%s pixel %d (%d,%d)', cube_tag, pixels(ii), yy, xx));
-                        saveas(fig, fullfile(settings.test_output_dir, 'plots', sprintf('%s_pixel_%06d_fit.png', ...
-                            cube_tag, pixels(ii))));
-                        close(fig);
-                    end
                 else
                     [yy, xx] = ind2sub([ny, nx], pixels(ii));
                     fit_status_map(yy, xx) = -1;
@@ -1252,7 +1288,7 @@ classdef EELS_PearsonSparse_FullFit
                 maps.NRMSE_map, maps.reliability_score_map, maps.attention_score_map, maps.fit_status_map, settings, ...
                 maps.attention_profile_cube, maps.signal_profile_cube);
             spatial_refit_history = struct('iteration', {}, 'candidate_count', {}, 'attempted', {}, 'accepted', {});
-            if settings.spatial_refit_enabled
+            if settings.spatial_refit_enabled && ~(hierarchy_active && settings.stage2_spatial_map_enabled)
                 [results, maps, spatial, spatial_refit_history] = EELS_PearsonSparse_FullFit.spatial_refit_datacube( ...
                     ene, cube, pixels, results, maps, settings, spatial);
             end
@@ -1283,6 +1319,22 @@ classdef EELS_PearsonSparse_FullFit
             cuberes.cube_info = cube_info;
             cuberes.sample_pixels = pixels;
             cuberes.results = results;
+            cuberes.stage1_hierarchy = hierarchy;
+            cuberes.cluster_label_map = hierarchy.cluster_label_map;
+            cuberes.cluster_membership_map = hierarchy.cluster_membership_map;
+            cuberes.cluster_outlier_mask = hierarchy.cluster_outlier_mask;
+            cuberes.cluster_templates = hierarchy.cluster_templates;
+            cuberes.template_deviation_map = hierarchy.template_deviation_map;
+            cuberes.zlp_spatial_loss_map = hierarchy.zlp_spatial_loss_map;
+            cuberes.zlp_interface_score_map = hierarchy.zlp_interface_score_map;
+            cuberes.zlp_interface_mask = hierarchy.zlp_interface_mask;
+            cuberes.zlp_interface_edge_x_score_map = hierarchy.zlp_interface_edge_x_score_map;
+            cuberes.zlp_interface_edge_y_score_map = hierarchy.zlp_interface_edge_y_score_map;
+            cuberes.zlp_interface_edge_x_mask = hierarchy.zlp_interface_edge_x_mask;
+            cuberes.zlp_interface_edge_y_mask = hierarchy.zlp_interface_edge_y_mask;
+            cuberes.zlp_interface_policy = hierarchy.zlp_interface_policy;
+            cuberes.hierarchical_refit_mask = hierarchy.hierarchical_refit_mask;
+            cuberes.hierarchical_refit_history = hierarchy.history;
             cuberes.R2_map = R2_map;
             cuberes.NRMSE_map = NRMSE_map;
             cuberes.T_map_raw = T_map_raw;
@@ -1330,6 +1382,8 @@ classdef EELS_PearsonSparse_FullFit
                 cuberes.stage1_sparse_pm_policy = settings.stage1_sparse_pm_policy;
             end
             cuberes.spatial = spatial;
+            cuberes = EELS_PearsonSparse_FullFit.apply_joint_temperature_map( ...
+                cuberes, settings, hierarchy, requested_stage2 && settings.stage2_spatial_map_enabled);
             cuberes.benchmark = struct('total_seconds', toc(run_timer), 'median_seconds_per_pixel', median(pixel_time, 'omitnan'), ...
                 'mean_seconds_per_pixel', mean(pixel_time, 'omitnan'), 'pixel_seconds', pixel_time, ...
                 'pixels_per_second', np ./ max(toc(run_timer), eps), 'parallel_enabled', use_parallel, ...
@@ -1342,10 +1396,37 @@ classdef EELS_PearsonSparse_FullFit
             EELS_PearsonSparse_FullFit.write_datacube_summary(fullfile(settings.test_output_dir, ...
                 sprintf('%s_datacube_summary.txt', cube_tag)), cuberes);
             if settings.save_plots
-                EELS_PearsonSparse_FullFit.notify_progress(settings, np, np, toc(run_timer), pixel_time, 'saving datacube map plot');
-                fig = EELS_PearsonSparse_FullFit.plot_datacube_maps(cuberes);
-                saveas(fig, fullfile(settings.test_output_dir, 'plots', sprintf('%s_maps.png', cube_tag)));
-                close(fig);
+                n_diag = min(np, max(0, round(settings.max_saved_spectrum_plots)));
+                for ii = 1:n_diag
+                    if EELS_PearsonSparse_FullFit.datacube_stop_requested(settings), break; end
+                    res = cuberes.results{ii};
+                    if ~isstruct(res) || isfield(res, 'error'), continue; end
+                    [yy, xx] = ind2sub([ny, nx], pixels(ii));
+                    EELS_PearsonSparse_FullFit.notify_progress(settings, ii - 1, max(n_diag, 1), ...
+                        toc(run_timer), pixel_time, sprintf('post-save spectrum diagnostic %d/%d', ii, n_diag));
+                    fig = [];
+                    try
+                        fig = EELS_PearsonSparse_FullFit.plot_result(res, ...
+                            sprintf('%s pixel %d (%d,%d)', cube_tag, pixels(ii), yy, xx));
+                        saveas(fig, fullfile(settings.test_output_dir, 'plots', ...
+                            sprintf('%s_pixel_%06d_fit.png', cube_tag, pixels(ii))));
+                    catch ME
+                        fprintf('post-save spectrum diagnostic %d skipped: %s\n', ii, ME.message);
+                    end
+                    if ~isempty(fig) && isgraphics(fig), close(fig); end
+                end
+                if ~EELS_PearsonSparse_FullFit.datacube_stop_requested(settings)
+                    EELS_PearsonSparse_FullFit.notify_progress(settings, 0, 1, toc(run_timer), pixel_time, ...
+                        'post-save datacube map plot');
+                    fig = [];
+                    try
+                        fig = EELS_PearsonSparse_FullFit.plot_datacube_maps(cuberes);
+                        saveas(fig, fullfile(settings.test_output_dir, 'plots', sprintf('%s_maps.png', cube_tag)));
+                    catch ME
+                        fprintf('post-save datacube map plot skipped: %s\n', ME.message);
+                    end
+                    if ~isempty(fig) && isgraphics(fig), close(fig); end
+                end
             end
             EELS_PearsonSparse_FullFit.notify_progress(settings, np, np, toc(run_timer), pixel_time, 'complete');
         end
@@ -1443,6 +1524,18 @@ classdef EELS_PearsonSparse_FullFit
             cuberes.fit_status_map = maps.fit_status_map;
             cuberes.spatial = spatial;
             cuberes.reused_stage1_for_stage2 = reused_stage1;
+            hierarchy = struct();
+            if isfield(cuberes, 'stage1_hierarchy') && isstruct(cuberes.stage1_hierarchy)
+                hierarchy = cuberes.stage1_hierarchy;
+            else
+                hierarchy_fields = {'zlp_interface_edge_x_mask', 'zlp_interface_edge_y_mask'};
+                for ff = 1:numel(hierarchy_fields)
+                    name = hierarchy_fields{ff};
+                    if isfield(cuberes, name), hierarchy.(name) = cuberes.(name); end
+                end
+            end
+            cuberes = EELS_PearsonSparse_FullFit.apply_joint_temperature_map( ...
+                cuberes, settings, hierarchy, settings.stage2_spatial_map_enabled);
             elapsed = toc(run_timer);
             cuberes.benchmark = struct('total_seconds', elapsed, 'median_seconds_per_pixel', median(pixel_time, 'omitnan'), ...
                 'mean_seconds_per_pixel', mean(pixel_time, 'omitnan'), 'pixel_seconds', pixel_time, ...
@@ -1458,10 +1551,18 @@ classdef EELS_PearsonSparse_FullFit
             if settings.save_plots
                 plot_dir = fullfile(settings.test_output_dir, 'plots');
                 if ~isfolder(plot_dir), mkdir(plot_dir); end
-                EELS_PearsonSparse_FullFit.notify_progress(settings, numel(pixels), numel(pixels), elapsed, pixel_time, 'saving Stage2 map plot');
-                fig = EELS_PearsonSparse_FullFit.plot_datacube_maps(cuberes);
-                saveas(fig, fullfile(plot_dir, 'stage2_reused_maps.png'));
-                close(fig);
+                if ~EELS_PearsonSparse_FullFit.datacube_stop_requested(settings)
+                    EELS_PearsonSparse_FullFit.notify_progress(settings, numel(pixels), numel(pixels), ...
+                        elapsed, pixel_time, 'post-save Stage2 map plot');
+                    fig = [];
+                    try
+                        fig = EELS_PearsonSparse_FullFit.plot_datacube_maps(cuberes);
+                        saveas(fig, fullfile(plot_dir, 'stage2_reused_maps.png'));
+                    catch ME
+                        fprintf('post-save Stage2 map plot skipped: %s\n', ME.message);
+                    end
+                    if ~isempty(fig) && isgraphics(fig), close(fig); end
+                end
             end
             EELS_PearsonSparse_FullFit.notify_progress(settings, numel(pixels), numel(pixels), elapsed, pixel_time, 'complete');
         end
@@ -1960,7 +2061,8 @@ classdef EELS_PearsonSparse_FullFit
             end
         end
 
-        function parallel_progress_update(settings, new_times, total, timer0, completed_pixels, observed_times)
+        function parallel_progress_update(settings, new_times, total, timer0, completed_pixels, observed_times, label)
+            if nargin < 7 || isempty(label), label = 'datacube parallel'; end
             persistent par_done par_times par_total par_timer_marker
             if isempty(par_timer_marker) || ~isequal(par_total, total) || ~isequal(par_timer_marker, timer0)
                 par_done = 0;
@@ -1978,7 +2080,7 @@ classdef EELS_PearsonSparse_FullFit
             new_times = new_times(isfinite(new_times));
             par_done = min(total, par_done + numel(new_times));
             par_times = [par_times, new_times]; %#ok<AGROW>
-            EELS_PearsonSparse_FullFit.notify_progress(settings, par_done, total, toc(timer0), par_times, 'datacube parallel');
+            EELS_PearsonSparse_FullFit.notify_progress(settings, par_done, total, toc(timer0), par_times, label);
             if par_done >= total
                 par_done = [];
                 par_times = [];
@@ -2101,6 +2203,1519 @@ classdef EELS_PearsonSparse_FullFit
             end
             res = struct('error', msg, 'pixel_y', yy, 'pixel_x', xx, ...
                 'pixel_index', pixel_index, 'fit_attempts', n_attempts);
+        end
+
+        function hierarchy = empty_stage1_hierarchy(ny, nx, np)
+            hierarchy = struct('enabled', false, 'status', 'disabled_or_insufficient_pixels', ...
+                'algorithm', 'v21_soft_hierarchical_zlp', 'cluster_count', 0, ...
+                'cluster_label_map', NaN(ny, nx), 'cluster_membership_map', NaN(ny, nx), ...
+                'cluster_outlier_mask', false(ny, nx), 'cluster_templates', struct([]), ...
+                'template_deviation_map', NaN(ny, nx), 'zlp_spatial_loss_map', NaN(ny, nx), ...
+                'zlp_interface_score_map', NaN(ny, nx), 'zlp_interface_mask', false(ny, nx), ...
+                'zlp_interface_edge_x_score_map', NaN(ny, max(nx - 1, 0)), ...
+                'zlp_interface_edge_y_score_map', NaN(max(ny - 1, 0), nx), ...
+                'zlp_interface_edge_x_mask', false(ny, max(nx - 1, 0)), ...
+                'zlp_interface_edge_y_mask', false(max(ny - 1, 0), nx), ...
+                'zlp_interface_policy', 'not_evaluated', ...
+                'hierarchical_refit_mask', false(ny, nx), 'sample_count', np, ...
+                'feature_axis_meV', [], 'feature_matrix', [], 'membership_probabilities', [], ...
+                'history', struct('phase', {}, 'attempted', {}, 'accepted', {}, 'elapsed_seconds', {}));
+        end
+
+        function [results, hierarchy, pixel_time] = hierarchical_stage1_datacube( ...
+                ene, cube, pixels, results, settings, full_spatial_sampling, use_parallel, workers)
+            [ny, nx, ~] = size(cube);
+            np = numel(pixels);
+            pixel_time = zeros(1, np);
+            hierarchy = EELS_PearsonSparse_FullFit.empty_stage1_hierarchy(ny, nx, np);
+            [features, feature_info] = EELS_PearsonSparse_FullFit.build_zlp_hierarchy_features( ...
+                ene, pixels, results, ny, nx, settings);
+            valid = feature_info.valid_mask;
+            if nnz(valid) < max(8, min(settings.stage1_cluster_min_pixels, np))
+                hierarchy.status = 'insufficient_valid_zlp_features';
+                return;
+            end
+            [labels, membership, probabilities, cluster_info] = ...
+                EELS_PearsonSparse_FullFit.cluster_zlp_features(features, feature_info, pixels, ny, nx, settings);
+            interface = EELS_PearsonSparse_FullFit.score_zlp_interfaces( ...
+                features, feature_info, pixels, probabilities, ny, nx, settings);
+            feature_info.zlp_interface_edge_x_mask = interface.edge_x_mask;
+            feature_info.zlp_interface_edge_y_mask = interface.edge_y_mask;
+            [templates, template_score] = EELS_PearsonSparse_FullFit.build_zlp_cluster_templates( ...
+                ene, results, labels, membership, feature_info, settings);
+            if isempty(templates) || all(arrayfun(@(t) isempty(t.theta), templates))
+                hierarchy.status = 'no_valid_cluster_templates';
+                return;
+            end
+            hierarchy.enabled = true;
+            hierarchy.status = 'ok';
+            hierarchy.cluster_count = numel(templates);
+            hierarchy.cluster_templates = templates;
+            hierarchy.feature_axis_meV = feature_info.axis_meV;
+            hierarchy.feature_matrix = features;
+            hierarchy.membership_probabilities = probabilities;
+            hierarchy.template_score = template_score;
+            hierarchy.cluster_model = cluster_info;
+            hierarchy.zlp_interface_score_map = interface.score_map;
+            hierarchy.zlp_interface_mask = interface.mask;
+            hierarchy.zlp_interface_edge_x_score_map = interface.edge_x_score;
+            hierarchy.zlp_interface_edge_y_score_map = interface.edge_y_score;
+            hierarchy.zlp_interface_edge_x_mask = interface.edge_x_mask;
+            hierarchy.zlp_interface_edge_y_mask = interface.edge_y_mask;
+            hierarchy.zlp_interface_policy = interface.policy;
+            label_map = NaN(ny, nx);
+            membership_map = NaN(ny, nx);
+            label_map(pixels) = labels;
+            membership_map(pixels) = membership;
+            hierarchy.cluster_label_map = label_map;
+            hierarchy.cluster_membership_map = membership_map;
+            hierarchy.cluster_outlier_mask = isfinite(label_map) & label_map <= 0;
+
+            template_contexts = cell(1, np);
+            for ii = 1:np
+                template_contexts{ii} = EELS_PearsonSparse_FullFit.hierarchy_context_for_pixel( ...
+                    ii, ene, pixels, results, labels, membership, probabilities, templates, feature_info, settings, false);
+            end
+            t0 = tic;
+            selected = find(valid(:).');
+            [results, t_pix, accepted] = EELS_PearsonSparse_FullFit.hierarchy_refit_batch( ...
+                ene, cube, pixels, results, selected, template_contexts, settings, ...
+                settings.stage1_hierarchical_template_max_iter, use_parallel, workers, 'template_polish');
+            pixel_time = pixel_time + t_pix;
+            hierarchy.history(end + 1) = struct('phase', 'template_polish', 'attempted', numel(selected), ...
+                'accepted', nnz(accepted), 'elapsed_seconds', toc(t0));
+            refit_mask = false(ny, nx);
+            refit_mask(pixels(accepted)) = true;
+
+            [labels, membership, label_switch] = EELS_PearsonSparse_FullFit.update_hierarchy_labels_after_polish( ...
+                results, labels, membership, probabilities, templates, settings);
+            if any(label_switch)
+                [templates, template_score] = EELS_PearsonSparse_FullFit.build_zlp_cluster_templates( ...
+                    ene, results, labels, membership, feature_info, settings);
+                hierarchy.history(end + 1) = struct('phase', 'single_label_update', ...
+                    'attempted', nnz(labels > 0), 'accepted', nnz(label_switch), 'elapsed_seconds', 0);
+                label_map(pixels) = labels;
+                membership_map(pixels) = membership;
+                hierarchy.cluster_templates = templates;
+                hierarchy.template_score = template_score;
+                hierarchy.cluster_label_map = label_map;
+                hierarchy.cluster_membership_map = membership_map;
+                hierarchy.cluster_outlier_mask = isfinite(label_map) & label_map <= 0;
+            end
+
+            n_sweeps = max(0, round(settings.stage1_spatial_zlp_iterations));
+            if ~full_spatial_sampling || ~settings.stage1_spatial_zlp_enabled
+                n_sweeps = 0;
+                if ~full_spatial_sampling
+                    hierarchy.status = 'cluster_templates_only_sparse_sampling';
+                end
+            end
+            spatial_loss = NaN(1, np);
+            for sweep = 1:n_sweeps
+                [spatial_loss, neighbor_count] = EELS_PearsonSparse_FullFit.hierarchy_spatial_loss( ...
+                    results, pixels, labels, probabilities, feature_info, ny, nx, settings);
+                candidates = find(valid(:).' & neighbor_count >= 2);
+                if sweep > 1 && ~isempty(candidates)
+                    [~, order] = sort(spatial_loss(candidates), 'descend', 'MissingPlacement', 'last');
+                    nkeep = max(1, ceil(settings.stage1_spatial_zlp_second_pass_fraction .* numel(candidates)));
+                    candidates = candidates(order(1:min(nkeep, numel(order))));
+                end
+                attempted = 0;
+                accepted_sweep = false(1, np);
+                sweep_t0 = tic;
+                for color = 0:3
+                    [cy, cx] = ind2sub([ny, nx], pixels(candidates));
+                    color_mask = (2 .* mod(cy - 1, 2) + mod(cx - 1, 2)) == color;
+                    color_idx = candidates(color_mask);
+                    if isempty(color_idx), continue; end
+                    contexts = cell(1, np);
+                    for jj = color_idx(:).'
+                        contexts{jj} = EELS_PearsonSparse_FullFit.hierarchy_context_for_pixel( ...
+                            jj, ene, pixels, results, labels, membership, probabilities, templates, feature_info, settings, true);
+                    end
+                    [results, t_color, accepted_color] = EELS_PearsonSparse_FullFit.hierarchy_refit_batch( ...
+                        ene, cube, pixels, results, color_idx, contexts, settings, ...
+                        settings.stage1_hierarchical_spatial_max_iter, use_parallel, workers, ...
+                        sprintf('spatial_sweep_%d_color_%d_of_4', sweep, color + 1));
+                    pixel_time = pixel_time + t_color;
+                    accepted_sweep = accepted_sweep | accepted_color;
+                    attempted = attempted + numel(color_idx);
+                end
+                refit_mask(pixels(accepted_sweep)) = true;
+                hierarchy.history(end + 1) = struct('phase', sprintf('spatial_sweep_%d', sweep), ...
+                    'attempted', attempted, 'accepted', nnz(accepted_sweep), 'elapsed_seconds', toc(sweep_t0));
+            end
+
+            [spatial_loss, ~, deviation] = EELS_PearsonSparse_FullFit.hierarchy_spatial_loss( ...
+                results, pixels, labels, probabilities, feature_info, ny, nx, settings, templates, membership);
+            hierarchy.zlp_spatial_loss_map(pixels) = spatial_loss;
+            hierarchy.template_deviation_map(pixels) = deviation;
+            hierarchy.hierarchical_refit_mask = refit_mask;
+            for ii = 1:np
+                if isstruct(results{ii}) && ~isfield(results{ii}, 'error')
+                    [yy, xx] = ind2sub([ny, nx], pixels(ii));
+                    soft = EELS_PearsonSparse_FullFit.soft_hierarchy_template( ...
+                        probabilities(ii, :), templates, settings);
+                    results{ii}.stage1_hierarchy = struct('enabled', true, 'status', hierarchy.status, ...
+                        'cluster_label', labels(ii), 'membership', membership(ii), ...
+                        'soft_template_weights', soft.weights, 'template_bound_blend', soft.bound_blend, ...
+                        'template_score', template_score(ii), 'template_deviation', deviation(ii), ...
+                        'spatial_loss', spatial_loss(ii), ...
+                        'zlp_interface_score', hierarchy.zlp_interface_score_map(yy, xx), ...
+                        'zlp_interface', hierarchy.zlp_interface_mask(yy, xx));
+                end
+            end
+        end
+
+        function [features, info] = build_zlp_hierarchy_features(ene, pixels, results, ny, nx, settings)
+            np = numel(pixels);
+            guard = NaN(1, np);
+            valid = false(1, np);
+            for ii = 1:np
+                r = results{ii};
+                if isstruct(r) && ~isfield(r, 'error') && isfield(r, 'raw_data_norm')
+                    valid(ii) = true;
+                    if isfield(r, 'zlp_region_policy') && isfield(r.zlp_region_policy, 'guard_start_meV')
+                        guard(ii) = r.zlp_region_policy.guard_start_meV;
+                    elseif isfield(r, 'zlp_signal_guard') && isfield(r.zlp_signal_guard, 'energy_range_meV')
+                        guard(ii) = r.zlp_signal_guard.energy_range_meV(1);
+                    end
+                end
+            end
+            bounds = sort(double(settings.stage1_cluster_core_window_bounds_meV(:).'));
+            if numel(bounds) < 2, bounds = [8, 18]; end
+            gmed = median(guard(isfinite(guard)), 'omitnan');
+            if ~isfinite(gmed), gmed = bounds(2) + 4; end
+            half_width = min(bounds(2), max(bounds(1), gmed - 4));
+            axis_meV = linspace(-half_width, half_width, 41);
+            profiles = NaN(np, numel(axis_meV));
+            stats = NaN(np, 4);
+            log_area = NaN(np, 1);
+            quality = zeros(np, 1);
+            for ii = find(valid)
+                r = results{ii};
+                e = double(r.ene_corrected(:));
+                y = max(double(r.raw_data_norm(:)), 0);
+                p = interp1(e, y, axis_meV(:), 'linear', 0).';
+                area = sum(max(p, 0));
+                if ~isfinite(area) || area <= 0
+                    valid(ii) = false;
+                    continue;
+                end
+                profiles(ii, :) = p ./ area;
+                log_area(ii) = log(max(trapz(axis_meV, max(p, 0)), eps));
+                stats(ii, 1) = EELS_PearsonSparse_FullFit.profile_half_width(axis_meV, p, -1);
+                stats(ii, 2) = EELS_PearsonSparse_FullFit.profile_half_width(axis_meV, p, 1);
+                mu = sum(axis_meV .* p) ./ max(sum(p), eps);
+                sig = sqrt(sum(((axis_meV - mu) .^ 2) .* p) ./ max(sum(p), eps));
+                stats(ii, 3) = sum(((axis_meV - mu) .^ 3) .* p) ./ max(sum(p) .* max(sig, eps) .^ 3, eps);
+                outer = abs(axis_meV) >= 0.70 .* half_width;
+                left = outer & axis_meV < 0;
+                right = outer & axis_meV > 0;
+                stats(ii, 4) = log((sum(p(left)) + eps) ./ (sum(p(right)) + eps));
+                quality(ii) = EELS_PearsonSparse_FullFit.zlp_template_quality(r, half_width, settings);
+            end
+            keep = valid & all(isfinite(profiles), 2).';
+            X = profiles(keep, :);
+            X = X - mean(X, 1, 'omitnan');
+            ncomp = min([settings.stage1_cluster_max_pca_components, size(X, 1) - 1, size(X, 2)]);
+            score = zeros(nnz(keep), 0);
+            basis = zeros(size(X, 2), 0);
+            center = mean(profiles(keep, :), 1, 'omitnan');
+            if ncomp >= 1
+                [U, S, V] = svd(X, 'econ');
+                score = U(:, 1:ncomp) * S(1:ncomp, 1:ncomp);
+                basis = V(:, 1:ncomp);
+            end
+            score = EELS_PearsonSparse_FullFit.robust_standardize_columns(score);
+            stat_z = EELS_PearsonSparse_FullFit.robust_standardize_columns(stats(keep, :));
+            area_z = EELS_PearsonSparse_FullFit.robust_standardize_columns(log_area(keep));
+            consistency = EELS_PearsonSparse_FullFit.profile_neighbor_consistency(profiles, pixels, keep, ny, nx);
+            consistency_z = EELS_PearsonSparse_FullFit.robust_standardize_columns(consistency(keep));
+            edge_scale = median(consistency(consistency > 0 & isfinite(consistency)), 'omitnan');
+            if ~isfinite(edge_scale) || edge_scale <= eps, edge_scale = 1; end
+            features = NaN(np, size(score, 2) + 4 + 1 + 1);
+            features(keep, :) = [sqrt(0.60 ./ max(size(score, 2), 1)) .* score, ...
+                sqrt(0.20 ./ 4) .* stat_z, sqrt(0.10) .* area_z, sqrt(0.10) .* consistency_z];
+            info = struct('valid_mask', keep(:).', 'axis_meV', axis_meV, 'profiles', profiles, ...
+                'stats', stats, 'log_area', log_area, 'quality_score', quality(:).', ...
+                'neighbor_consistency', consistency(:).', 'pca_center', center, 'pca_basis', basis);
+            info.ny = ny;
+            info.nx = nx;
+            info.map_size = [ny, nx];
+            info.edge_scale = edge_scale;
+        end
+
+        function width = profile_half_width(e, p, side)
+            p = max(double(p(:).'), 0);
+            e = double(e(:).');
+            peak = max(p, [], 'omitnan');
+            if ~isfinite(peak) || peak <= 0
+                width = NaN;
+                return;
+            end
+            mask = side .* e >= 0;
+            idx = find(mask & p >= 0.5 .* peak);
+            if isempty(idx)
+                width = max(abs(e(mask)), [], 'omitnan');
+            else
+                width = max(abs(e(idx)), [], 'omitnan');
+            end
+        end
+
+        function score = zlp_template_quality(result, half_width, settings)
+            e = double(result.ene_corrected(:));
+            y = double(result.raw_data_norm(:));
+            z = double(result.stage1.zlp_norm(:));
+            core = abs(e) <= 0.55 .* half_width;
+            shoulder = abs(e) > 0.55 .* half_width & abs(e) <= half_width;
+            scale = max(max(y(core), [], 'omitnan'), eps);
+            core_rmse = sqrt(mean((y(core) - z(core)) .^ 2, 'omitnan')) ./ scale;
+            shoulder_rmse = sqrt(mean((y(shoulder) - z(shoulder)) .^ 2, 'omitnan')) ./ scale;
+            core_score = exp(-core_rmse ./ 0.025);
+            shoulder_score = exp(-shoulder_rmse ./ 0.020);
+            shift = 0;
+            if isfield(result, 'total_energy_shift_meV') && isfinite(result.total_energy_shift_meV)
+                shift = abs(result.total_energy_shift_meV);
+            end
+            dE = median(abs(diff(e)), 'omitnan');
+            align_score = exp(-shift ./ max(2 .* dE, eps));
+            [lb, ub] = EELS_PearsonSparse_FullFit.theta_bounds(settings);
+            th = double(result.theta(:).');
+            span = max(ub - lb, eps);
+            hit = mean((th - lb) ./ span < 0.01 | (ub - th) ./ span < 0.01, 'omitnan');
+            stable_score = max(0, 1 - hit);
+            score = 0.40 .* core_score + 0.25 .* shoulder_score + 0.15 .* align_score + ...
+                0.20 .* stable_score;
+            score = min(max(score, 0), 1);
+        end
+
+        function consistency = profile_neighbor_consistency(profiles, pixels, valid, ny, nx)
+            np = numel(pixels);
+            consistency = NaN(np, 1);
+            lookup = zeros(ny, nx);
+            lookup(pixels) = 1:np;
+            for ii = find(valid)
+                [yy, xx] = ind2sub([ny, nx], pixels(ii));
+                vals = [];
+                for dy = -1:1
+                    for dx = -1:1
+                        if dy == 0 && dx == 0, continue; end
+                        y2 = yy + dy; x2 = xx + dx;
+                        if y2 < 1 || y2 > ny || x2 < 1 || x2 > nx, continue; end
+                        jj = lookup(y2, x2);
+                        if jj > 0 && valid(jj)
+                            vals(end + 1) = norm(profiles(ii, :) - profiles(jj, :), 2); %#ok<AGROW>
+                        end
+                    end
+                end
+                if ~isempty(vals), consistency(ii) = mean(vals, 'omitnan'); end
+            end
+            fill = median(consistency(isfinite(consistency)), 'omitnan');
+            if ~isfinite(fill), fill = 0; end
+            consistency(~isfinite(consistency)) = fill;
+        end
+
+        function Xz = robust_standardize_columns(X)
+            X = double(X);
+            if isempty(X), Xz = X; return; end
+            med = median(X, 1, 'omitnan');
+            scale = 1.4826 .* median(abs(X - med), 1, 'omitnan');
+            fallback = std(X, 0, 1, 'omitnan');
+            bad = ~isfinite(scale) | scale <= eps;
+            scale(bad) = fallback(bad);
+            scale(~isfinite(scale) | scale <= eps) = 1;
+            Xz = (X - med) ./ scale;
+            Xz(~isfinite(Xz)) = 0;
+        end
+
+        function value = struct_scalar(s, field_name, fallback)
+            value = fallback;
+            if isstruct(s) && isfield(s, field_name) && isscalar(s.(field_name)) && isfinite(double(s.(field_name)))
+                value = double(s.(field_name));
+            end
+        end
+
+        function [labels, membership, probabilities, model] = cluster_zlp_features( ...
+                features, feature_info, pixels, ny, nx, settings)
+            valid = feature_info.valid_mask(:);
+            X = double(features(valid, :));
+            n = size(X, 1);
+            if settings.stage1_cluster_count > 0
+                k_values = min(max(1, round(settings.stage1_cluster_count)), n);
+            else
+                kr = sort(round(double(settings.stage1_cluster_k_range(:).')));
+                if numel(kr) < 2, kr = [1, max(1, kr(1))]; end
+                k_values = kr(1):min(kr(end), n);
+            end
+            min_count = max(settings.stage1_cluster_min_pixels, ceil(settings.stage1_cluster_min_fraction .* n));
+            best = struct('score', Inf, 'labels', ones(n, 1), 'centers', mean(X, 1), ...
+                'dist2', zeros(n, 1), 'sse', 0, 'k', 1);
+            for k = k_values
+                [lab, centers, dist2, sse] = EELS_PearsonSparse_FullFit.deterministic_kmeans( ...
+                    X, k, settings.stage1_cluster_random_seed, 5, 100);
+                counts = accumarray(lab, 1, [k, 1]);
+                if k > 1 && any(counts < min_count), continue; end
+                bic = n .* log(max(sse ./ max(n, 1), eps)) + k .* size(X, 2) .* log(max(n, 2));
+                if bic < best.score
+                    best = struct('score', bic, 'labels', lab, 'centers', centers, ...
+                        'dist2', dist2, 'sse', sse, 'k', k);
+                end
+            end
+            k = best.k;
+            D2 = EELS_PearsonSparse_FullFit.squared_distance_matrix(X, best.centers);
+            if k == 1
+                prob_valid = ones(n, 1);
+            else
+                nearest = min(D2, [], 2);
+                sigma2 = median(nearest(nearest > 0 & isfinite(nearest)), 'omitnan');
+                if ~isfinite(sigma2) || sigma2 <= eps
+                    sigma2 = median(D2(D2 > 0 & isfinite(D2)), 'omitnan');
+                end
+                if ~isfinite(sigma2) || sigma2 <= eps, sigma2 = 1; end
+                prob_valid = exp(-0.5 .* D2 ./ sigma2);
+                prob_valid = prob_valid ./ max(sum(prob_valid, 2), eps);
+            end
+            lab = best.labels;
+            profiles = feature_info.profiles(valid, :);
+            valid_pixels = pixels(valid);
+            lookup = zeros(ny, nx);
+            lookup(valid_pixels) = 1:n;
+            finite_profile_d = [];
+            for ii = 1:n
+                [yy, xx] = ind2sub([ny, nx], valid_pixels(ii));
+                if xx < nx && lookup(yy, xx + 1) > 0
+                    finite_profile_d(end + 1) = norm(profiles(ii, :) - profiles(lookup(yy, xx + 1), :)); %#ok<AGROW>
+                end
+                if yy < ny && lookup(yy + 1, xx) > 0
+                    finite_profile_d(end + 1) = norm(profiles(ii, :) - profiles(lookup(yy + 1, xx), :)); %#ok<AGROW>
+                end
+            end
+            edge_scale = median(finite_profile_d(finite_profile_d > 0), 'omitnan');
+            if ~isfinite(edge_scale) || edge_scale <= eps, edge_scale = 1; end
+            for pass = 1:2
+                for ii = 1:n
+                    [yy, xx] = ind2sub([ny, nx], valid_pixels(ii));
+                    energy = -log(max(prob_valid(ii, :), eps));
+                    for dy = -1:1
+                        for dx = -1:1
+                            if dy == 0 && dx == 0, continue; end
+                            y2 = yy + dy; x2 = xx + dx;
+                            if y2 < 1 || y2 > ny || x2 < 1 || x2 > nx, continue; end
+                            jj = lookup(y2, x2);
+                            if jj <= 0, continue; end
+                            ew = exp(-norm(profiles(ii, :) - profiles(jj, :)) ./ edge_scale);
+                            if dy ~= 0 && dx ~= 0, ew = ew ./ sqrt(2); end
+                            energy = energy + 0.35 .* ew .* ((1:k) ~= lab(jj));
+                        end
+                    end
+                    [~, lab(ii)] = min(energy);
+                end
+            end
+            [membership_valid, ~] = max(prob_valid, [], 2);
+            outlier = membership_valid < settings.stage1_cluster_membership_min;
+            lab(outlier) = 0;
+            labels = zeros(numel(pixels), 1);
+            membership = zeros(numel(pixels), 1);
+            probabilities = zeros(numel(pixels), k);
+            labels(valid) = lab;
+            membership(valid) = membership_valid;
+            probabilities(valid, :) = prob_valid;
+            model = struct('k', k, 'centers', best.centers, 'bic', best.score, ...
+                'sse', best.sse, 'min_cluster_pixels', min_count, 'edge_scale', edge_scale, ...
+                'feature_weights', [0.60, 0.20, 0.10, 0.10], 'label_passes', 2);
+        end
+
+        function [labels, centers, min_dist2, sse] = deterministic_kmeans(X, k, seed, replicates, max_iter)
+            n = size(X, 1);
+            d = size(X, 2);
+            best_sse = Inf;
+            best_labels = ones(n, 1);
+            best_centers = mean(X, 1);
+            old_rng = rng;
+            cleanup = onCleanup(@()rng(old_rng)); %#ok<NASGU>
+            for rep = 1:max(1, replicates)
+                rng(seed + 7919 .* (rep - 1), 'twister');
+                centers0 = zeros(k, d);
+                first = randi(n);
+                centers0(1, :) = X(first, :);
+                closest = sum((X - centers0(1, :)) .^ 2, 2);
+                for cc = 2:k
+                    weights = max(closest, 0);
+                    if sum(weights) <= eps
+                        pick = mod(first + cc - 2, n) + 1;
+                    else
+                        cdf = cumsum(weights) ./ sum(weights);
+                        pick = find(cdf >= rand(), 1, 'first');
+                    end
+                    centers0(cc, :) = X(pick, :);
+                    closest = min(closest, sum((X - centers0(cc, :)) .^ 2, 2));
+                end
+                centers_rep = centers0;
+                labels_rep = ones(n, 1);
+                for iter = 1:max_iter
+                    D2 = EELS_PearsonSparse_FullFit.squared_distance_matrix(X, centers_rep);
+                    [~, new_labels] = min(D2, [], 2);
+                    if iter > 1 && isequal(new_labels, labels_rep), break; end
+                    labels_rep = new_labels;
+                    for cc = 1:k
+                        members = X(labels_rep == cc, :);
+                        if isempty(members)
+                            [~, far] = max(min(D2, [], 2));
+                            centers_rep(cc, :) = X(far, :);
+                        else
+                            centers_rep(cc, :) = median(members, 1, 'omitnan');
+                        end
+                    end
+                end
+                D2 = EELS_PearsonSparse_FullFit.squared_distance_matrix(X, centers_rep);
+                min_d = D2(sub2ind(size(D2), (1:n).', labels_rep));
+                sse_rep = sum(min_d, 'omitnan');
+                if sse_rep < best_sse
+                    best_sse = sse_rep;
+                    best_labels = labels_rep;
+                    best_centers = centers_rep;
+                end
+            end
+            labels = best_labels;
+            centers = best_centers;
+            D2 = EELS_PearsonSparse_FullFit.squared_distance_matrix(X, centers);
+            min_dist2 = D2(sub2ind(size(D2), (1:n).', labels));
+            sse = sum(min_dist2, 'omitnan');
+        end
+
+        function interface = score_zlp_interfaces(features, feature_info, pixels, probabilities, ny, nx, settings)
+            interface = struct('score_map', NaN(ny, nx), 'mask', false(ny, nx), ...
+                'edge_x_score', NaN(ny, max(nx - 1, 0)), ...
+                'edge_y_score', NaN(max(ny - 1, 0), nx), ...
+                'edge_x_mask', false(ny, max(nx - 1, 0)), ...
+                'edge_y_mask', false(max(ny - 1, 0), nx), ...
+                'distance_median', NaN, 'distance_scale', NaN, ...
+                'policy', 'disabled');
+            if ~settings.stage1_zlp_interface_enabled || isempty(features) || isempty(pixels)
+                return;
+            end
+            valid = feature_info.valid_mask(:);
+            F = double(features);
+            if size(F, 2) > 1
+                % The final hierarchy feature is neighbor consistency itself;
+                % exclude it so an edge is scored only from the local ZLP pair.
+                F = F(:, 1:(end - 1));
+            end
+            lookup = zeros(ny, nx);
+            lookup(pixels) = 1:numel(pixels);
+            edge_type = zeros(0, 1);
+            edge_y = zeros(0, 1);
+            edge_x = zeros(0, 1);
+            distance = zeros(0, 1);
+            separation = zeros(0, 1);
+            for yy = 1:ny
+                for xx = 1:nx
+                    ii = lookup(yy, xx);
+                    if ii <= 0 || ~valid(ii) || any(~isfinite(F(ii, :))), continue; end
+                    if xx < nx
+                        jj = lookup(yy, xx + 1);
+                        if jj > 0 && valid(jj) && all(isfinite(F(jj, :)))
+                            edge_type(end + 1, 1) = 1; %#ok<AGROW>
+                            edge_y(end + 1, 1) = yy; %#ok<AGROW>
+                            edge_x(end + 1, 1) = xx; %#ok<AGROW>
+                            distance(end + 1, 1) = sqrt(mean((F(ii, :) - F(jj, :)) .^ 2)); %#ok<AGROW>
+                            separation(end + 1, 1) = EELS_PearsonSparse_FullFit.zlp_probability_separation( ...
+                                probabilities, ii, jj); %#ok<AGROW>
+                        end
+                    end
+                    if yy < ny
+                        jj = lookup(yy + 1, xx);
+                        if jj > 0 && valid(jj) && all(isfinite(F(jj, :)))
+                            edge_type(end + 1, 1) = 2; %#ok<AGROW>
+                            edge_y(end + 1, 1) = yy; %#ok<AGROW>
+                            edge_x(end + 1, 1) = xx; %#ok<AGROW>
+                            distance(end + 1, 1) = sqrt(mean((F(ii, :) - F(jj, :)) .^ 2)); %#ok<AGROW>
+                            separation(end + 1, 1) = EELS_PearsonSparse_FullFit.zlp_probability_separation( ...
+                                probabilities, ii, jj); %#ok<AGROW>
+                        end
+                    end
+                end
+            end
+            good = isfinite(distance) & distance >= 0;
+            if nnz(good) < 2
+                interface.policy = 'insufficient_neighbor_edges';
+                return;
+            end
+            d = distance(good);
+            dmed = median(d, 'omitnan');
+            dscale = 1.4826 .* median(abs(d - dmed), 'omitnan');
+            positive = d(d > 0);
+            fallback = 0.25 .* median(positive, 'omitnan');
+            if ~isfinite(fallback) || fallback <= eps, fallback = std(d, 0, 'omitnan'); end
+            if ~isfinite(fallback) || fallback <= eps, fallback = 1; end
+            dscale = max(dscale, fallback);
+            denom = max(dmed, dscale);
+            robust_score = max((distance - dmed) ./ dscale, 0);
+            ratio = distance ./ max(denom, eps);
+            score = robust_score + settings.stage1_zlp_interface_probability_weight .* separation;
+            strong = good & score >= settings.stage1_zlp_interface_score_threshold & ...
+                ratio >= settings.stage1_zlp_interface_distance_ratio_min;
+            coherent_candidate = good & score >= settings.stage1_zlp_interface_coherent_score_threshold & ...
+                ratio >= settings.stage1_zlp_interface_distance_ratio_min;
+            for ee = find(good(:).')
+                if edge_type(ee) == 1
+                    interface.edge_x_score(edge_y(ee), edge_x(ee)) = score(ee);
+                    interface.edge_x_mask(edge_y(ee), edge_x(ee)) = strong(ee);
+                else
+                    interface.edge_y_score(edge_y(ee), edge_x(ee)) = score(ee);
+                    interface.edge_y_mask(edge_y(ee), edge_x(ee)) = strong(ee);
+                end
+            end
+            candidate_x = false(size(interface.edge_x_mask));
+            candidate_y = false(size(interface.edge_y_mask));
+            for ee = find(coherent_candidate(:).')
+                if edge_type(ee) == 1
+                    candidate_x(edge_y(ee), edge_x(ee)) = true;
+                else
+                    candidate_y(edge_y(ee), edge_x(ee)) = true;
+                end
+            end
+            min_support = max(1, round(settings.stage1_zlp_interface_min_coherent_neighbors));
+            if ~isempty(candidate_x)
+                support_x = conv2(double(candidate_x), ones(3, 1), 'same');
+                interface.edge_x_mask = interface.edge_x_mask | (candidate_x & support_x >= min_support);
+            end
+            if ~isempty(candidate_y)
+                support_y = conv2(double(candidate_y), ones(1, 3), 'same');
+                interface.edge_y_mask = interface.edge_y_mask | (candidate_y & support_y >= min_support);
+            end
+            pixel_score = NaN(ny, nx);
+            for yy = 1:ny
+                for xx = 1:nx
+                    local = [];
+                    if xx > 1, local(end + 1) = interface.edge_x_score(yy, xx - 1); end %#ok<AGROW>
+                    if xx < nx, local(end + 1) = interface.edge_x_score(yy, xx); end %#ok<AGROW>
+                    if yy > 1, local(end + 1) = interface.edge_y_score(yy - 1, xx); end %#ok<AGROW>
+                    if yy < ny, local(end + 1) = interface.edge_y_score(yy, xx); end %#ok<AGROW>
+                    local = local(isfinite(local));
+                    if ~isempty(local), pixel_score(yy, xx) = max(local); end
+                end
+            end
+            interface.score_map = pixel_score;
+            interface.mask(:, 1:max(nx - 1, 0)) = interface.mask(:, 1:max(nx - 1, 0)) | interface.edge_x_mask;
+            if nx > 1
+                interface.mask(:, 2:nx) = interface.mask(:, 2:nx) | interface.edge_x_mask;
+            end
+            interface.mask(1:max(ny - 1, 0), :) = interface.mask(1:max(ny - 1, 0), :) | interface.edge_y_mask;
+            if ny > 1
+                interface.mask(2:ny, :) = interface.mask(2:ny, :) | interface.edge_y_mask;
+            end
+            interface.distance_median = dmed;
+            interface.distance_scale = dscale;
+            interface.policy = sprintf('zlp_feature_strong_%.3g_coherent_%.3g_support_%d_ratio_%.3g', ...
+                settings.stage1_zlp_interface_score_threshold, ...
+                settings.stage1_zlp_interface_coherent_score_threshold, min_support, ...
+                settings.stage1_zlp_interface_distance_ratio_min);
+        end
+
+        function separation = zlp_probability_separation(probabilities, ii, jj)
+            separation = 0;
+            if isempty(probabilities) || ii > size(probabilities, 1) || jj > size(probabilities, 1)
+                return;
+            end
+            p = max(double(probabilities(ii, :)), 0);
+            q = max(double(probabilities(jj, :)), 0);
+            if sum(p) <= 0 || sum(q) <= 0, return; end
+            p = p ./ sum(p);
+            q = q ./ sum(q);
+            separation = min(max(1 - sum(p .* q), 0), 1);
+        end
+
+        function sharp = pair_crosses_zlp_interface(context, yy, xx, y2, x2)
+            sharp = false;
+            if ~isstruct(context) || ~isfield(context, 'zlp_interface_edge_x_mask') || ...
+                    ~isfield(context, 'zlp_interface_edge_y_mask')
+                return;
+            end
+            ex = context.zlp_interface_edge_x_mask;
+            ey = context.zlp_interface_edge_y_mask;
+            dy = y2 - yy;
+            dx = x2 - xx;
+            if abs(dx) > 1 || abs(dy) > 1, return; end
+            if dy == 0 && dx ~= 0
+                x0 = min(xx, x2);
+                sharp = x0 >= 1 && x0 <= size(ex, 2) && yy <= size(ex, 1) && ex(yy, x0);
+            elseif dx == 0 && dy ~= 0
+                y0 = min(yy, y2);
+                sharp = y0 >= 1 && y0 <= size(ey, 1) && xx <= size(ey, 2) && ey(y0, xx);
+            elseif dx ~= 0 && dy ~= 0
+                x0 = min(xx, x2);
+                y0 = min(yy, y2);
+                candidates = false(1, 4);
+                if x0 >= 1 && x0 <= size(ex, 2)
+                    if yy <= size(ex, 1), candidates(1) = ex(yy, x0); end
+                    if y2 <= size(ex, 1), candidates(2) = ex(y2, x0); end
+                end
+                if y0 >= 1 && y0 <= size(ey, 1)
+                    if xx <= size(ey, 2), candidates(3) = ey(y0, xx); end
+                    if x2 <= size(ey, 2), candidates(4) = ey(y0, x2); end
+                end
+                sharp = any(candidates);
+            end
+        end
+
+        function D2 = squared_distance_matrix(X, C)
+            D2 = max(sum(X .^ 2, 2) + sum(C .^ 2, 2).' - 2 .* (X * C.'), 0);
+        end
+
+        function [templates, template_score] = build_zlp_cluster_templates( ...
+                ene, results, labels, membership, feature_info, settings)
+            np = numel(results);
+            template_score = zeros(1, np);
+            neighbor_consistency = feature_info.neighbor_consistency(:).';
+            scale = median(neighbor_consistency(neighbor_consistency > 0 & isfinite(neighbor_consistency)), 'omitnan');
+            if ~isfinite(scale) || scale <= eps, scale = 1; end
+            template_score = 0.85 .* feature_info.quality_score + 0.15 .* exp(-neighbor_consistency ./ scale);
+            k = max(labels);
+            templates = repmat(struct('label', 0, 'theta', [], 'phi', [], 'phi_scale', [], ...
+                'theta_lb', [], 'theta_ub', [], 'seed_indices', [], 'seed_count', 0, ...
+                'membership_median', NaN), 1, max(k, 0));
+            dE = median(abs(diff(double(ene(:)))), 'omitnan');
+            if ~isfinite(dE) || dE <= 0, dE = 1; end
+            for cc = 1:k
+                idx = find(labels == cc);
+                if isempty(idx), continue; end
+                eligible = idx(template_score(idx) >= settings.stage1_cluster_template_score_min);
+                min_seed = min(numel(idx), max(8, ceil(0.5 .* numel(idx))));
+                if numel(eligible) < min_seed
+                    [~, order] = sort(template_score(idx), 'descend');
+                    eligible = idx(order(1:min(min_seed, numel(order))));
+                end
+                theta = NaN(numel(eligible), numel(results{eligible(1)}.theta));
+                for jj = 1:numel(eligible)
+                    theta(jj, :) = double(results{eligible(jj)}.theta(:).');
+                end
+                theta_template = median(theta, 1, 'omitnan');
+                ctx = struct('center_scale_meV', dE);
+                tmp_settings = settings;
+                tmp_settings.stage1_hierarchy_context = ctx;
+                phi = EELS_PearsonSparse_FullFit.stage1_zlp_phi_from_theta(theta_template, tmp_settings);
+                phi_all = NaN(size(theta, 1), numel(phi));
+                for jj = 1:size(theta, 1)
+                    phi_all(jj, :) = EELS_PearsonSparse_FullFit.stage1_zlp_phi_from_theta(theta(jj, :), tmp_settings);
+                end
+                phi_mad = 1.4826 .* median(abs(phi_all - median(phi_all, 1, 'omitnan')), 1, 'omitnan');
+                nz = settings.num_zlp_components;
+                center_scale = min(max(phi_mad(1:nz), 0.5), settings.stage1_cluster_center_channels);
+                width_scale = min(max(phi_mad((nz + 1):(3 .* nz)), log1p(settings.stage1_cluster_width_rel_floor)), ...
+                    log1p(settings.stage1_cluster_width_rel_cap));
+                shape_scale = min(max(phi_mad((3 .* nz + 1):(5 .* nz)), log1p(settings.stage1_cluster_shape_rel_floor)), ...
+                    log1p(settings.stage1_cluster_shape_rel_cap));
+                phi_scale = [center_scale, width_scale, shape_scale];
+                [theta_lb, theta_ub] = EELS_PearsonSparse_FullFit.hierarchy_template_bounds( ...
+                    theta_template, theta, dE, settings);
+                templates(cc) = struct('label', cc, 'theta', theta_template, 'phi', phi, ...
+                    'phi_scale', phi_scale, 'theta_lb', theta_lb, 'theta_ub', theta_ub, ...
+                    'seed_indices', eligible(:).', 'seed_count', numel(eligible), ...
+                    'membership_median', median(membership(idx), 'omitnan'));
+            end
+        end
+
+        function [theta_lb, theta_ub] = hierarchy_template_bounds(template, seed_theta, dE, settings)
+            [theta_lb, theta_ub] = EELS_PearsonSparse_FullFit.theta_bounds(settings);
+            nz = settings.num_zlp_components;
+            center_idx = 2:(1 + nz);
+            width_idx = (2 + nz):(1 + 3 .* nz);
+            shape_idx = (2 + 3 .* nz):(1 + 5 .* nz);
+            center_delta = settings.stage1_cluster_center_channels .* dE;
+            theta_lb(center_idx) = max(theta_lb(center_idx), template(center_idx) - center_delta);
+            theta_ub(center_idx) = min(theta_ub(center_idx), template(center_idx) + center_delta);
+            for idx = width_idx
+                vals = seed_theta(:, idx);
+                relmad = 1.4826 .* median(abs(vals - median(vals, 'omitnan')), 'omitnan') ./ max(abs(template(idx)), eps);
+                rel = min(settings.stage1_cluster_width_rel_cap, max(settings.stage1_cluster_width_rel_floor, ...
+                    settings.stage1_cluster_mad_multiplier .* relmad));
+                theta_lb(idx) = max(theta_lb(idx), template(idx) .* (1 - rel));
+                theta_ub(idx) = min(theta_ub(idx), template(idx) .* (1 + rel));
+            end
+            for idx = shape_idx
+                vals = seed_theta(:, idx);
+                relmad = 1.4826 .* median(abs(vals - median(vals, 'omitnan')), 'omitnan') ./ max(abs(template(idx)), eps);
+                rel = min(settings.stage1_cluster_shape_rel_cap, max(settings.stage1_cluster_shape_rel_floor, ...
+                    settings.stage1_cluster_mad_multiplier .* relmad));
+                theta_lb(idx) = max(theta_lb(idx), template(idx) .* (1 - rel));
+                theta_ub(idx) = min(theta_ub(idx), template(idx) .* (1 + rel));
+            end
+        end
+
+        function soft = soft_hierarchy_template(probability_row, templates, settings)
+            [global_lb, global_ub] = EELS_PearsonSparse_FullFit.theta_bounds(settings);
+            soft = struct('available', false, 'phi', [], 'phi_scale', [], ...
+                'theta_lb', global_lb, 'theta_ub', global_ub, 'weights', [], ...
+                'confidence', 0, 'bound_blend', 0);
+            valid_templates = find(arrayfun(@(t) ~isempty(t.theta) && ~isempty(t.phi), templates));
+            if isempty(valid_templates), return; end
+            p = zeros(1, numel(valid_templates));
+            for jj = 1:numel(valid_templates)
+                cc = valid_templates(jj);
+                if cc <= numel(probability_row) && isfinite(probability_row(cc))
+                    p(jj) = max(double(probability_row(cc)), 0);
+                end
+            end
+            if sum(p) <= 0, return; end
+            p = p ./ sum(p);
+            nphi = numel(templates(valid_templates(1)).phi);
+            phi_all = NaN(numel(valid_templates), nphi);
+            scale_all = NaN(numel(valid_templates), nphi);
+            lb_all = NaN(numel(valid_templates), numel(global_lb));
+            ub_all = NaN(numel(valid_templates), numel(global_ub));
+            for jj = 1:numel(valid_templates)
+                t = templates(valid_templates(jj));
+                phi_all(jj, :) = double(t.phi(:).');
+                scale_all(jj, :) = double(t.phi_scale(:).');
+                lb_all(jj, :) = double(t.theta_lb(:).');
+                ub_all(jj, :) = double(t.theta_ub(:).');
+            end
+            mu = p * phi_all;
+            variance = sum(p(:) .* (scale_all .^ 2 + (phi_all - mu) .^ 2), 1);
+            scale = sqrt(max(variance, eps));
+            blended_lb = p * lb_all;
+            blended_ub = p * ub_all;
+            confidence = max(p);
+            if numel(p) == 1
+                blend = 1;
+            else
+                chance = 1 ./ numel(p);
+                blend = min(max((confidence - chance) ./ max(1 - chance, eps), 0), 1);
+            end
+            theta_lb = global_lb + blend .* (blended_lb - global_lb);
+            theta_ub = global_ub + blend .* (blended_ub - global_ub);
+            bad = ~isfinite(theta_lb) | ~isfinite(theta_ub) | theta_ub <= theta_lb;
+            theta_lb(bad) = global_lb(bad);
+            theta_ub(bad) = global_ub(bad);
+            soft = struct('available', true, 'phi', mu, 'phi_scale', scale, ...
+                'theta_lb', theta_lb, 'theta_ub', theta_ub, 'weights', p, ...
+                'confidence', confidence, 'bound_blend', blend);
+        end
+
+        function ctx = hierarchy_context_for_pixel(ii, ene, pixels, results, labels, membership, ...
+                probabilities, templates, feature_info, settings, include_neighbors)
+            ctx = struct('enabled', false);
+            if ii < 1 || ii > numel(results) || ~isstruct(results{ii}) || isfield(results{ii}, 'error')
+                return;
+            end
+            dE = median(abs(diff(double(ene(:)))), 'omitnan');
+            if ~isfinite(dE) || dE <= 0, dE = 1; end
+            ctx.enabled = true;
+            ctx.center_scale_meV = dE;
+            ctx.membership = membership(ii);
+            ctx.data_cost = max(double(results{ii}.stage1.resnorm), 1e-10);
+            label = labels(ii);
+            soft = struct('available', false);
+            if settings.stage1_cluster_soft_constraints_enabled && ii <= size(probabilities, 1)
+                soft = EELS_PearsonSparse_FullFit.soft_hierarchy_template( ...
+                    probabilities(ii, :), templates, settings);
+            end
+            if isfield(soft, 'available') && soft.available
+                ctx.template_phi = soft.phi;
+                ctx.template_scale = soft.phi_scale;
+                ctx.theta_lb = soft.theta_lb;
+                ctx.theta_ub = soft.theta_ub;
+                ctx.membership = soft.confidence;
+                ctx.soft_template_weights = soft.weights;
+                ctx.template_bound_blend = soft.bound_blend;
+                ctx.cluster_label = label;
+            elseif label > 0 && label <= numel(templates) && ~isempty(templates(label).theta)
+                ctx.template_phi = templates(label).phi;
+                ctx.template_scale = templates(label).phi_scale;
+                ctx.theta_lb = templates(label).theta_lb;
+                ctx.theta_ub = templates(label).theta_ub;
+                ctx.cluster_label = label;
+            else
+                [ctx.theta_lb, ctx.theta_ub] = EELS_PearsonSparse_FullFit.theta_bounds(settings);
+                ctx.cluster_label = 0;
+                ctx.membership = 0;
+            end
+            if ~include_neighbors
+                return;
+            end
+            np = numel(pixels);
+            ny = feature_info.ny;
+            nx = feature_info.nx;
+            lookup = zeros(ny, nx);
+            lookup(pixels) = 1:np;
+            [yy, xx] = ind2sub([ny, nx], pixels(ii));
+            phi_neighbors = [];
+            neighbor_w = [];
+            p0 = feature_info.profiles(ii, :);
+            for dy = -1:1
+                for dx = -1:1
+                    if dy == 0 && dx == 0, continue; end
+                    y2 = yy + dy; x2 = xx + dx;
+                    if y2 < 1 || y2 > ny || x2 < 1 || x2 > nx, continue; end
+                    if EELS_PearsonSparse_FullFit.pair_crosses_zlp_interface(feature_info, yy, xx, y2, x2)
+                        continue;
+                    end
+                    jj = lookup(y2, x2);
+                    if jj <= 0 || ~isstruct(results{jj}) || isfield(results{jj}, 'error'), continue; end
+                    tmp_settings = settings;
+                    tmp_settings.stage1_hierarchy_context = struct('center_scale_meV', dE);
+                    phi_j = EELS_PearsonSparse_FullFit.stage1_zlp_phi_from_theta(results{jj}.theta, tmp_settings);
+                    profile_delta = norm(p0 - feature_info.profiles(jj, :), 2);
+                    overlap = sum(probabilities(ii, :) .* probabilities(jj, :));
+                    ew = exp(-profile_delta ./ max(feature_info.edge_scale, eps)) .* overlap;
+                    if dy ~= 0 && dx ~= 0, ew = ew ./ sqrt(2); end
+                    if ew > 0
+                        phi_neighbors(end + 1, :) = phi_j; %#ok<AGROW>
+                        neighbor_w(end + 1, 1) = ew; %#ok<AGROW>
+                    end
+                end
+            end
+            ctx.neighbor_phi = phi_neighbors;
+            ctx.neighbor_weight = neighbor_w;
+            if label > 0 && label <= numel(templates)
+                ctx.spatial_scale = templates(label).phi_scale;
+            elseif ~isempty(phi_neighbors)
+                med = median(phi_neighbors, 1, 'omitnan');
+                ctx.spatial_scale = max(1.4826 .* median(abs(phi_neighbors - med), 1, 'omitnan'), 0.05);
+            end
+        end
+
+        function [labels, membership, switched] = update_hierarchy_labels_after_polish( ...
+                results, labels, membership, probabilities, templates, settings)
+            switched = false(size(labels));
+            valid_templates = find(arrayfun(@(t) ~isempty(t.theta), templates));
+            if numel(valid_templates) < 2, return; end
+            for ii = 1:numel(results)
+                old_label = labels(ii);
+                if old_label <= 0 || ~isstruct(results{ii}) || isfield(results{ii}, 'error'), continue; end
+                local_settings = settings;
+                dE = median(abs(diff(double(results{ii}.ene_corrected(:)))), 'omitnan');
+                if ~isfinite(dE) || dE <= 0, dE = 1; end
+                local_settings.stage1_hierarchy_context = struct('center_scale_meV', dE);
+                phi = EELS_PearsonSparse_FullFit.stage1_zlp_phi_from_theta(results{ii}.theta, local_settings);
+                score = -Inf(1, numel(templates));
+                for cc = valid_templates
+                    z = (phi - templates(cc).phi) ./ max(templates(cc).phi_scale, 0.05);
+                    template_score = exp(-0.5 .* mean(z .^ 2, 'omitnan'));
+                    cluster_score = probabilities(ii, min(cc, size(probabilities, 2)));
+                    score(cc) = 0.70 .* template_score + 0.30 .* cluster_score;
+                end
+                [new_score, new_label] = max(score);
+                old_score = score(old_label);
+                if new_label ~= old_label && isfinite(new_score) && ...
+                        new_score >= old_score + settings.stage1_cluster_label_switch_margin
+                    labels(ii) = new_label;
+                    membership(ii) = max(membership(ii), probabilities(ii, new_label));
+                    switched(ii) = true;
+                end
+            end
+        end
+
+        function [results, pixel_time, accepted_mask] = hierarchy_refit_batch( ...
+                ene, cube, pixels, results, selected, contexts, settings, max_iter, use_parallel, workers, phase)
+            np = numel(results);
+            pixel_time = zeros(1, np);
+            accepted_mask = false(1, np);
+            if isempty(selected), return; end
+            old_selected = results(selected);
+            candidate = cell(1, numel(selected));
+            elapsed = zeros(1, numel(selected));
+            phase_label = strrep(char(string(phase)), '_', ' ');
+            phase_timer = tic;
+            phase_settings = settings;
+            phase_settings.datacube_parallel_effective_workers = max(1, round(workers));
+            worker_settings = settings;
+            worker_settings.datacube_progress_callback = [];
+            worker_settings.datacube_stop_callback = [];
+            cancel_requested = false;
+            if use_parallel
+                EELS_PearsonSparse_FullFit.ensure_parallel_pool(workers);
+                progress_queue = [];
+                try
+                    progress_queue = parallel.pool.DataQueue;
+                    afterEach(progress_queue, @(t)EELS_PearsonSparse_FullFit.parallel_progress_update( ...
+                        phase_settings, t, numel(selected), phase_timer, 0, [], phase_label));
+                catch
+                    progress_queue = [];
+                end
+                batch_size = round(settings.datacube_parallel_phase_batch_size);
+                if ~isfinite(batch_size) || batch_size <= 0
+                    batch_size = max(16, 2 .* max(1, round(workers)));
+                end
+                batch_size = max(1, min(batch_size, numel(selected)));
+                for first = 1:batch_size:numel(selected)
+                    if EELS_PearsonSparse_FullFit.datacube_stop_requested(settings)
+                        cancel_requested = true;
+                        break;
+                    end
+                    batch = first:min(first + batch_size - 1, numel(selected));
+                    batch_candidate = cell(1, numel(batch));
+                    batch_elapsed = zeros(1, numel(batch));
+                    parfor bb = 1:numel(batch)
+                        kk = batch(bb);
+                        ii = selected(kk);
+                        t0 = tic;
+                        batch_candidate{bb} = EELS_PearsonSparse_FullFit.hierarchy_refit_one( ...
+                            ene, squeeze(cube(pixels(ii) + (0:(size(cube, 3) - 1)) .* size(cube, 1) .* size(cube, 2))), ...
+                            old_selected{kk}, contexts{ii}, worker_settings, max_iter, phase);
+                        batch_elapsed(bb) = toc(t0);
+                        if ~isempty(progress_queue), send(progress_queue, batch_elapsed(bb)); end
+                    end
+                    candidate(batch) = batch_candidate;
+                    elapsed(batch) = batch_elapsed;
+                    if isempty(progress_queue)
+                        EELS_PearsonSparse_FullFit.notify_progress(phase_settings, batch(end), ...
+                            numel(selected), toc(phase_timer), elapsed(1:batch(end)), phase_label);
+                    end
+                    if EELS_PearsonSparse_FullFit.datacube_stop_requested(settings)
+                        cancel_requested = true;
+                        break;
+                    end
+                end
+            else
+                [ny, nx, ~] = size(cube);
+                for kk = 1:numel(selected)
+                    if EELS_PearsonSparse_FullFit.datacube_stop_requested(settings)
+                        cancel_requested = true;
+                        break;
+                    end
+                    ii = selected(kk);
+                    [yy, xx] = ind2sub([ny, nx], pixels(ii));
+                    t0 = tic;
+                    candidate{kk} = EELS_PearsonSparse_FullFit.hierarchy_refit_one( ...
+                        ene, squeeze(cube(yy, xx, :)), old_selected{kk}, contexts{ii}, worker_settings, max_iter, phase);
+                    elapsed(kk) = toc(t0);
+                    EELS_PearsonSparse_FullFit.notify_progress(settings, kk, numel(selected), ...
+                        toc(phase_timer), elapsed(1:kk), phase_label);
+                end
+            end
+            [ny, nx, ~] = size(cube);
+            for kk = 1:numel(selected)
+                if isempty(candidate{kk}), continue; end
+                ii = selected(kk);
+                pixel_time(ii) = elapsed(kk);
+                cand = candidate{kk};
+                old = results{ii};
+                if EELS_PearsonSparse_FullFit.accept_hierarchy_candidate(old, cand)
+                    [yy, xx] = ind2sub([ny, nx], pixels(ii));
+                    cand.pixel_y = yy; cand.pixel_x = xx; cand.pixel_index = pixels(ii);
+                    results{ii} = cand;
+                    accepted_mask(ii) = true;
+                end
+            end
+            if cancel_requested
+                EELS_PearsonSparse_FullFit.save_datacube_checkpoint( ...
+                    settings, np, results, pixel_time, pixels, np);
+                error('EELS:DatacubePaused', ...
+                    'Datacube paused during %s. A resumable Stage1 checkpoint was saved in %s.', ...
+                    phase_label, settings.test_output_dir);
+            end
+        end
+
+        function candidate = hierarchy_refit_one(ene, spectrum, old, context, settings, max_iter, phase)
+            candidate = old;
+            if ~isstruct(context) || ~isfield(context, 'enabled') || ~context.enabled
+                return;
+            end
+            pixel_settings = settings;
+            pixel_settings.run_stage2 = false;
+            if numel(pixel_settings.eshift_range) >= 2 && ...
+                    abs(diff(double(pixel_settings.eshift_range(1:2)))) < 1e-9
+                pixel_settings.eshift_range = [-1e-3, 1e-3];
+            end
+            pixel_settings.initial_theta = old.theta;
+            pixel_settings.stage1_hierarchy_context = context;
+            pixel_settings.stage1_fixed_EM = old.EM_final;
+            pixel_settings.stage1_strict_polish_enabled = false;
+            pixel_settings.stage1_rounds = struct('name', char(phase), ...
+                'em_step_meV', settings.em_step_meV, 'lambda_be_soft', settings.lambda_be_soft, ...
+                'max_nonlinear_iter', max(1, round(max_iter)));
+            pixel_settings.stage1_zlp_gain_heavy_init_enabled = false;
+            pixel_settings.stage1_zlp_gain_tail_prior_enabled = false;
+            pixel_settings.stage1_zlp_gain_asym_shape_prior_enabled = false;
+            try
+                candidate = EELS_PearsonSparse_FullFit.solve_stage1(ene, spectrum, pixel_settings);
+                candidate.original_settings.stage1_hierarchy_context = struct();
+                candidate.settings.stage1_hierarchy_context = struct();
+            catch ME
+                candidate = struct('error', ME.message);
+            end
+        end
+
+        function accept = accept_hierarchy_candidate(old, candidate)
+            accept = isstruct(candidate) && ~isfield(candidate, 'error') && isfield(candidate, 'metrics') && ...
+                isstruct(old) && isfield(old, 'metrics');
+            if ~accept, return; end
+            accept = isfinite(candidate.metrics.R2) && isfinite(candidate.metrics.NRMSE) && ...
+                candidate.metrics.R2 >= old.metrics.R2 - 2e-4 && ...
+                candidate.metrics.NRMSE <= old.metrics.NRMSE + 0.002;
+        end
+
+        function [loss, neighbor_count, deviation] = hierarchy_spatial_loss( ...
+                results, pixels, labels, probabilities, feature_info, ny, nx, settings, templates, membership)
+            if nargin < 10, templates = struct([]); end
+            if nargin < 11, membership = ones(size(labels)); end
+            np = numel(results);
+            loss = NaN(1, np);
+            deviation = NaN(1, np);
+            neighbor_count = zeros(1, np);
+            lookup = zeros(ny, nx);
+            lookup(pixels) = 1:np;
+            dE = 1;
+            for ii = 1:np
+                if isstruct(results{ii}) && ~isfield(results{ii}, 'error') && numel(results{ii}.ene_corrected) > 1
+                    dE = median(abs(diff(results{ii}.ene_corrected)), 'omitnan');
+                    break;
+                end
+            end
+            if ~isfinite(dE) || dE <= 0, dE = 1; end
+            tmp_settings = settings;
+            tmp_settings.stage1_hierarchy_context = struct('center_scale_meV', dE);
+            phi = NaN(np, 5 .* settings.num_zlp_components);
+            for ii = 1:np
+                if isstruct(results{ii}) && ~isfield(results{ii}, 'error') && isfield(results{ii}, 'theta')
+                    phi(ii, :) = EELS_PearsonSparse_FullFit.stage1_zlp_phi_from_theta(results{ii}.theta, tmp_settings);
+                end
+            end
+            for ii = 1:np
+                if any(~isfinite(phi(ii, :))), continue; end
+                [yy, xx] = ind2sub([ny, nx], pixels(ii));
+                vals = [];
+                for dy = -1:1
+                    for dx = -1:1
+                        if dy == 0 && dx == 0, continue; end
+                        y2 = yy + dy; x2 = xx + dx;
+                        if y2 < 1 || y2 > ny || x2 < 1 || x2 > nx, continue; end
+                        if EELS_PearsonSparse_FullFit.pair_crosses_zlp_interface(feature_info, yy, xx, y2, x2)
+                            continue;
+                        end
+                        jj = lookup(y2, x2);
+                        if jj <= 0 || any(~isfinite(phi(jj, :))), continue; end
+                        overlap = sum(probabilities(ii, :) .* probabilities(jj, :));
+                        pd = norm(feature_info.profiles(ii, :) - feature_info.profiles(jj, :), 2);
+                        ew = exp(-pd ./ max(feature_info.edge_scale, eps)) .* overlap;
+                        if dy ~= 0 && dx ~= 0, ew = ew ./ sqrt(2); end
+                        if ew <= 0, continue; end
+                        vals(end + 1) = ew .* mean(abs(phi(ii, :) - phi(jj, :)), 'omitnan'); %#ok<AGROW>
+                    end
+                end
+                neighbor_count(ii) = numel(vals);
+                if ~isempty(vals), loss(ii) = mean(vals, 'omitnan'); end
+                if ~isempty(templates)
+                    soft = EELS_PearsonSparse_FullFit.soft_hierarchy_template( ...
+                        probabilities(ii, :), templates, settings);
+                    if settings.stage1_cluster_soft_constraints_enabled && soft.available
+                        scale = max(soft.phi_scale, eps);
+                        deviation(ii) = sqrt(mean(((phi(ii, :) - soft.phi) ./ scale) .^ 2, 'omitnan')) .* soft.confidence;
+                    elseif labels(ii) > 0 && labels(ii) <= numel(templates)
+                        scale = max(templates(labels(ii)).phi_scale, eps);
+                        deviation(ii) = sqrt(mean(((phi(ii, :) - templates(labels(ii)).phi) ./ scale) .^ 2, 'omitnan')) .* membership(ii);
+                    end
+                end
+            end
+        end
+
+        function [results, pixel_time] = promote_stage1_results_datacube(results, pixels, settings, use_parallel, workers)
+            np = numel(results);
+            pixel_time = zeros(1, np);
+            old = results;
+            phase_label = 'final Stage2';
+            phase_timer = tic;
+            phase_settings = settings;
+            phase_settings.datacube_parallel_effective_workers = max(1, round(workers));
+            worker_settings = settings;
+            worker_settings.datacube_progress_callback = [];
+            worker_settings.datacube_stop_callback = [];
+            cancel_requested = false;
+            if use_parallel
+                EELS_PearsonSparse_FullFit.ensure_parallel_pool(workers);
+                progress_queue = [];
+                try
+                    progress_queue = parallel.pool.DataQueue;
+                    afterEach(progress_queue, @(t)EELS_PearsonSparse_FullFit.parallel_progress_update( ...
+                        phase_settings, t, np, phase_timer, 0, [], phase_label));
+                catch
+                    progress_queue = [];
+                end
+                batch_size = round(settings.datacube_parallel_phase_batch_size);
+                if ~isfinite(batch_size) || batch_size <= 0
+                    batch_size = max(16, 2 .* max(1, round(workers)));
+                end
+                batch_size = max(1, min(batch_size, np));
+                for first = 1:batch_size:np
+                    if EELS_PearsonSparse_FullFit.datacube_stop_requested(settings)
+                        cancel_requested = true;
+                        break;
+                    end
+                    batch = first:min(first + batch_size - 1, np);
+                    batch_results = old(batch);
+                    batch_out = batch_results;
+                    batch_time = zeros(1, numel(batch));
+                    batch_pixels = pixels(batch);
+                    parfor bb = 1:numel(batch)
+                        t0 = tic;
+                        if isstruct(batch_results{bb}) && ~isfield(batch_results{bb}, 'error')
+                            try
+                                batch_out{bb} = EELS_PearsonSparse_FullFit.promote_stage1_to_stage2( ...
+                                    batch_results{bb}, worker_settings);
+                            catch ME
+                                batch_out{bb} = struct('error', ME.message, 'pixel_index', batch_pixels(bb));
+                            end
+                        end
+                        batch_time(bb) = toc(t0);
+                        if ~isempty(progress_queue), send(progress_queue, batch_time(bb)); end
+                    end
+                    results(batch) = batch_out;
+                    pixel_time(batch) = batch_time;
+                    if isempty(progress_queue)
+                        EELS_PearsonSparse_FullFit.notify_progress(phase_settings, batch(end), np, ...
+                            toc(phase_timer), pixel_time(1:batch(end)), phase_label);
+                    end
+                    if EELS_PearsonSparse_FullFit.datacube_stop_requested(settings)
+                        cancel_requested = true;
+                        break;
+                    end
+                end
+            else
+                for ii = 1:np
+                    if EELS_PearsonSparse_FullFit.datacube_stop_requested(settings)
+                        cancel_requested = true;
+                        break;
+                    end
+                    t0 = tic;
+                    if isstruct(old{ii}) && ~isfield(old{ii}, 'error')
+                        try
+                            results{ii} = EELS_PearsonSparse_FullFit.promote_stage1_to_stage2(old{ii}, worker_settings);
+                        catch ME
+                            results{ii} = struct('error', ME.message, 'pixel_index', pixels(ii));
+                        end
+                    end
+                    pixel_time(ii) = toc(t0);
+                    EELS_PearsonSparse_FullFit.notify_progress(settings, ii, np, ...
+                        toc(phase_timer), pixel_time(1:ii), phase_label);
+                end
+            end
+            if cancel_requested
+                EELS_PearsonSparse_FullFit.save_datacube_checkpoint( ...
+                    settings, np, results, pixel_time, pixels, np);
+                error('EELS:DatacubePaused', ...
+                    'Datacube paused during final Stage2. A resumable checkpoint was saved in %s.', ...
+                    settings.test_output_dir);
+            end
+        end
+
+        function cuberes = apply_joint_temperature_map(cuberes, settings, hierarchy, enabled)
+            raw = cuberes.T_map_raw;
+            [ny, nx] = size(raw);
+            cuberes.T_map_data_valid = NaN(ny, nx);
+            cuberes.T_data_valid_mask = false(ny, nx);
+            cuberes.temperature_unconstrained_mask = false(ny, nx);
+            cuberes.T_map_joint = NaN(ny, nx);
+            cuberes.T_uncertainty_joint_map = NaN(ny, nx);
+            cuberes.T_spatial_inferred_mask = false(ny, nx);
+            cuberes.T_joint_shift_map = NaN(ny, nx);
+            cuberes.temperature_joint_policy = 'disabled';
+            if ~enabled || ~isfield(cuberes, 'results') || isempty(cuberes.results)
+                if ~enabled
+                    cuberes.T_map_joint = raw;
+                    cuberes.T_map_spatial_refined = raw;
+                end
+                return;
+            end
+            Tmin = min(double(settings.stage2_T_grid(:)), [], 'omitnan');
+            Tmax = max(double(settings.stage2_T_grid(:)), [], 'omitnan');
+            valid = false(ny, nx);
+            unconstrained = false(ny, nx);
+            pixels = cuberes.sample_pixels;
+            for ii = 1:numel(pixels)
+                [yy, xx] = ind2sub([ny, nx], pixels(ii));
+                r = cuberes.results{ii};
+                if ~isstruct(r) || isfield(r, 'error') || ~isfield(r, 'stage2') || ...
+                        ~isstruct(r.stage2) || ~isfield(r.stage2, 'status') || ~strcmp(r.stage2.status, 'ok')
+                    unconstrained(yy, xx) = true;
+                    continue;
+                end
+                st2 = r.stage2;
+                [tg, cg] = EELS_PearsonSparse_FullFit.stage2_raw_profile(st2);
+                if numel(tg) < 3 || numel(cg) ~= numel(tg)
+                    unconstrained(yy, xx) = true;
+                    continue;
+                end
+                [tg, order] = sort(double(tg(:)));
+                cg = double(cg(:));
+                cg = cg(order);
+                good = isfinite(tg) & isfinite(cg);
+                [tg, unique_idx] = unique(tg(good), 'stable');
+                cg = cg(good); cg = cg(unique_idx);
+                if numel(tg) < 3
+                    unconstrained(yy, xx) = true;
+                    continue;
+                end
+                rel = cuberes.reliability_score_map(yy, xx);
+                unc = cuberes.T_uncertainty_map(yy, xx);
+                T0 = raw(yy, xx);
+                hard_pairs = NaN;
+                min_pairs = settings.stage2_ratio_min_pairs;
+                if isfield(st2, 'num_hard_pairs'), hard_pairs = st2.num_hard_pairs; end
+                if isfield(st2, 'min_hard_pairs'), min_pairs = st2.min_hard_pairs; end
+                boundary = ~isfinite(T0) || T0 <= Tmin + settings.stage2_boundary_margin_K || ...
+                    T0 >= Tmax - settings.stage2_boundary_margin_K;
+                two_sided = true;
+                if isfield(st2, 'T_cost_valley_lower_K') && isfield(st2, 'T_cost_valley_upper_K')
+                    two_sided = isfinite(st2.T_cost_valley_lower_K) && isfinite(st2.T_cost_valley_upper_K) && ...
+                        st2.T_cost_valley_lower_K > Tmin && st2.T_cost_valley_upper_K < Tmax;
+                end
+                valid_here = ~boundary && two_sided && isfinite(rel) && ...
+                    rel >= settings.stage2_spatial_map_valid_reliability && isfinite(unc) && ...
+                    unc <= settings.stage2_spatial_map_max_uncertainty_K && ...
+                    isfinite(hard_pairs) && hard_pairs >= min_pairs;
+                valid(yy, xx) = valid_here;
+                unconstrained(yy, xx) = ~valid_here;
+            end
+            cuberes.T_data_valid_mask = valid;
+            cuberes.temperature_unconstrained_mask = unconstrained & isfinite(raw);
+            cuberes.T_map_data_valid(valid) = raw(valid);
+            if nnz(valid) == 0
+                cuberes.temperature_joint_policy = 'no_valid_temperature_anchors';
+                cuberes.T_map_spatial_refined = cuberes.T_map_joint;
+                return;
+            end
+            T_joint = cuberes.T_map_data_valid;
+            unc_joint = NaN(ny, nx);
+            unc_joint(valid) = cuberes.T_uncertainty_map(valid);
+            inferred = false(ny, nx);
+            edge = EELS_PearsonSparse_FullFit.temperature_edge_context(cuberes, hierarchy, settings);
+            if settings.stage2_zlp_guided_inference_enabled
+                anchors = NaN(ny, nx);
+                anchors(valid) = raw(valid);
+                for ii = 1:numel(pixels)
+                    [yy, xx] = ind2sub([ny, nx], pixels(ii));
+                    if valid(yy, xx), continue; end
+                    [vals, weights, neighbor_idx] = EELS_PearsonSparse_FullFit.temperature_neighbor_values( ...
+                        anchors, yy, xx, edge);
+                    if numel(vals) < settings.stage2_spatial_map_min_neighbor_support
+                        continue;
+                    end
+                    T_joint(yy, xx) = EELS_PearsonSparse_FullFit.weighted_quantile(vals, weights, 0.5);
+                    inferred(yy, xx) = isfinite(T_joint(yy, xx));
+                    if inferred(yy, xx)
+                        local_unc = cuberes.T_uncertainty_map(neighbor_idx);
+                        local_unc = local_unc(:);
+                        local_weights = weights(:);
+                        keep_unc = isfinite(local_unc) & isfinite(local_weights);
+                        if any(keep_unc)
+                            base_unc = EELS_PearsonSparse_FullFit.weighted_quantile( ...
+                                local_unc(keep_unc), local_weights(keep_unc), 0.5);
+                        else
+                            base_unc = NaN;
+                        end
+                        spread = 1.4826 .* EELS_PearsonSparse_FullFit.weighted_quantile( ...
+                            abs(vals(:) - T_joint(yy, xx)), local_weights, 0.5);
+                        if isfinite(base_unc)
+                            unc_joint(yy, xx) = hypot(base_unc, spread);
+                        else
+                            unc_joint(yy, xx) = spread;
+                        end
+                    end
+                end
+            end
+            cuberes.T_map_joint = T_joint;
+            cuberes.T_uncertainty_joint_map = unc_joint;
+            cuberes.T_spatial_inferred_mask = inferred;
+            cuberes.T_joint_shift_map = T_joint - raw;
+            cuberes.T_map_spatial_refined = T_joint;
+            cuberes.spatial_refine_delta_map = cuberes.T_joint_shift_map;
+            cuberes.spatial_refine_mask = inferred;
+            cuberes.temperature_joint_policy = 'v21_zlp_interface_gated_one_way_inference_no_temperature_smoothing';
+            cuberes.temperature_joint_start = 'fixed_data_valid_anchors';
+            cuberes.temperature_joint_grid_K = double(settings.stage2_T_grid(:).');
+            cuberes.temperature_joint_objective = NaN;
+        end
+
+        function [T, C] = stage2_raw_profile(stage2)
+            T = [];
+            C = [];
+            if isfield(stage2, 'temperature_profile') && isstruct(stage2.temperature_profile) && ...
+                    isfield(stage2.temperature_profile, 'T_grid') && isfield(stage2.temperature_profile, 'cost_raw')
+                T = stage2.temperature_profile.T_grid;
+                C = stage2.temperature_profile.cost_raw;
+            elseif isfield(stage2, 'T_grid') && isfield(stage2, 'cost_grid')
+                T = stage2.T_grid;
+                C = stage2.cost_grid;
+            end
+        end
+
+        function edge = temperature_edge_context(cuberes, hierarchy, settings)
+            [ny, nx] = size(cuberes.T_map_raw);
+            edge = struct('ny', ny, 'nx', nx, 'attention', cuberes.attention_profile_cube, ...
+                'signal', cuberes.signal_profile_cube, 'probabilities', [], 'pixels', cuberes.sample_pixels, ...
+                'cluster_floor', settings.stage2_spatial_map_cluster_floor, ...
+                'zlp_interface_edge_x_mask', false(ny, max(nx - 1, 0)), ...
+                'zlp_interface_edge_y_mask', false(max(ny - 1, 0), nx));
+            edge.lookup = zeros(ny, nx);
+            edge.lookup(cuberes.sample_pixels) = 1:numel(cuberes.sample_pixels);
+            if isstruct(hierarchy) && isfield(hierarchy, 'membership_probabilities')
+                edge.probabilities = hierarchy.membership_probabilities;
+            end
+            if isstruct(hierarchy) && isfield(hierarchy, 'zlp_interface_edge_x_mask')
+                edge.zlp_interface_edge_x_mask = hierarchy.zlp_interface_edge_x_mask;
+            end
+            if isstruct(hierarchy) && isfield(hierarchy, 'zlp_interface_edge_y_mask')
+                edge.zlp_interface_edge_y_mask = hierarchy.zlp_interface_edge_y_mask;
+            end
+        end
+
+        function T = initialize_joint_temperature(raw, valid, edge, settings, use_median)
+            T = raw;
+            med_global = median(raw(valid), 'omitnan');
+            if ~isfinite(med_global), med_global = median(settings.stage2_T_grid, 'omitnan'); end
+            T(~isfinite(T)) = med_global;
+            for pass = 1:3
+                Tnext = T;
+                for yy = 1:edge.ny
+                    for xx = 1:edge.nx
+                        if valid(yy, xx) && ~use_median, continue; end
+                        [vals, weights] = EELS_PearsonSparse_FullFit.temperature_neighbor_values(T, yy, xx, edge);
+                        if numel(vals) >= settings.stage2_spatial_map_min_neighbor_support
+                            Tnext(yy, xx) = EELS_PearsonSparse_FullFit.weighted_quantile(vals, weights, 0.5);
+                        end
+                    end
+                end
+                T = Tnext;
+            end
+        end
+
+        function [T, objective] = optimize_joint_temperature(T, data_cost, data_weight, valid, edge, grid, settings)
+            for sweep = 1:max(1, round(settings.stage2_spatial_map_iterations))
+                for color = 0:3
+                    for yy = 1:edge.ny
+                        for xx = 1:edge.nx
+                            if (2 .* mod(yy - 1, 2) + mod(xx - 1, 2)) ~= color, continue; end
+                            [vals, weights] = EELS_PearsonSparse_FullFit.temperature_neighbor_values(T, yy, xx, edge);
+                            if isempty(vals) && ~valid(yy, xx), continue; end
+                            cost = zeros(size(grid));
+                            if data_weight(yy, xx) > 0
+                                cost = cost + data_weight(yy, xx) .* reshape(data_cost(yy, xx, :), size(grid));
+                            end
+                            for jj = 1:numel(vals)
+                                cost = cost + settings.stage2_spatial_map_weight .* weights(jj) .* ...
+                                    EELS_PearsonSparse_FullFit.truncated_huber_temperature( ...
+                                    grid - vals(jj), settings.stage2_spatial_map_huber_scale_K, ...
+                                    settings.stage2_spatial_map_truncation_K);
+                            end
+                            [~, best] = min(cost);
+                            T(yy, xx) = grid(best);
+                        end
+                    end
+                end
+            end
+            objective = EELS_PearsonSparse_FullFit.joint_temperature_objective( ...
+                T, data_cost, data_weight, edge, grid, settings);
+        end
+
+        function [vals, weights, indices] = temperature_neighbor_values(T, yy, xx, edge)
+            vals = [];
+            weights = [];
+            indices = [];
+            pix0 = sub2ind([edge.ny, edge.nx], yy, xx);
+            ii = edge.lookup(pix0);
+            for dy = -1:1
+                for dx = -1:1
+                    if dy == 0 && dx == 0, continue; end
+                    y2 = yy + dy; x2 = xx + dx;
+                    if y2 < 1 || y2 > edge.ny || x2 < 1 || x2 > edge.nx || ~isfinite(T(y2, x2)), continue; end
+                    if EELS_PearsonSparse_FullFit.pair_crosses_zlp_interface(edge, yy, xx, y2, x2)
+                        continue;
+                    end
+                    jj = edge.lookup(y2, x2);
+                    if ii <= 0 || jj <= 0, continue; end
+                    delta = 0;
+                    if ~isempty(edge.attention)
+                        a = squeeze(edge.attention(yy, xx, :));
+                        b = squeeze(edge.attention(y2, x2, :));
+                        delta = max(delta, mean(abs(a - b), 'omitnan'));
+                    end
+                    if ~isempty(edge.signal)
+                        a = squeeze(edge.signal(yy, xx, :));
+                        b = squeeze(edge.signal(y2, x2, :));
+                        delta = max(delta, 0.5 .* mean(abs(a - b), 'omitnan'));
+                    end
+                    spectral_w = exp(-max(delta, 0) ./ 0.18);
+                    cluster_w = 1;
+                    if ~isempty(edge.probabilities) && ii <= size(edge.probabilities, 1) && jj <= size(edge.probabilities, 1)
+                        overlap = sum(edge.probabilities(ii, :) .* edge.probabilities(jj, :));
+                        cluster_w = edge.cluster_floor + (1 - edge.cluster_floor) .* overlap;
+                    end
+                    w = spectral_w .* cluster_w;
+                    if dy ~= 0 && dx ~= 0, w = w ./ sqrt(2); end
+                    if isfinite(w) && w > 0
+                        vals(end + 1) = T(y2, x2); %#ok<AGROW>
+                        weights(end + 1) = w; %#ok<AGROW>
+                        indices(end + 1) = sub2ind([edge.ny, edge.nx], y2, x2); %#ok<AGROW>
+                    end
+                end
+            end
+        end
+
+        function cost = truncated_huber_temperature(delta_T, scale_K, trunc_K)
+            u = abs(double(delta_T)) ./ max(double(scale_K), eps);
+            huber = 0.5 .* u .^ 2;
+            tail = u > 1;
+            huber(tail) = u(tail) - 0.5;
+            trunc_u = abs(double(trunc_K)) ./ max(double(scale_K), eps);
+            trunc_cost = trunc_u - 0.5;
+            if trunc_u <= 1, trunc_cost = 0.5 .* trunc_u .^ 2; end
+            cost = min(huber, trunc_cost);
+        end
+
+        function objective = joint_temperature_objective(T, data_cost, data_weight, edge, grid, settings)
+            objective = 0;
+            for yy = 1:edge.ny
+                for xx = 1:edge.nx
+                    if ~isfinite(T(yy, xx)), continue; end
+                    if data_weight(yy, xx) > 0
+                        ci = reshape(data_cost(yy, xx, :), size(grid));
+                        objective = objective + data_weight(yy, xx) .* interp1(grid, ci, T(yy, xx), 'linear', 'extrap');
+                    end
+                    [vals, weights] = EELS_PearsonSparse_FullFit.temperature_neighbor_values(T, yy, xx, edge);
+                    for jj = 1:numel(vals)
+                        objective = objective + 0.5 .* settings.stage2_spatial_map_weight .* weights(jj) .* ...
+                            EELS_PearsonSparse_FullFit.truncated_huber_temperature( ...
+                            T(yy, xx) - vals(jj), settings.stage2_spatial_map_huber_scale_K, ...
+                            settings.stage2_spatial_map_truncation_K);
+                    end
+                end
+            end
+        end
+
+        function support = temperature_neighbor_support(valid, edge)
+            support = zeros(size(valid));
+            dummy = double(valid);
+            for yy = 1:edge.ny
+                for xx = 1:edge.nx
+                    [vals, ~] = EELS_PearsonSparse_FullFit.temperature_neighbor_values(dummy, yy, xx, edge);
+                    support(yy, xx) = nnz(vals > 0);
+                end
+            end
+        end
+
+        function uncertainty = joint_temperature_uncertainty(T, data_cost, data_weight, edge, grid, settings)
+            uncertainty = NaN(size(T));
+            for yy = 1:edge.ny
+                for xx = 1:edge.nx
+                    if ~isfinite(T(yy, xx)), continue; end
+                    local = zeros(size(grid));
+                    if data_weight(yy, xx) > 0
+                        local = local + data_weight(yy, xx) .* reshape(data_cost(yy, xx, :), size(grid));
+                    end
+                    [vals, weights] = EELS_PearsonSparse_FullFit.temperature_neighbor_values(T, yy, xx, edge);
+                    for jj = 1:numel(vals)
+                        local = local + settings.stage2_spatial_map_weight .* weights(jj) .* ...
+                            EELS_PearsonSparse_FullFit.truncated_huber_temperature( ...
+                            grid - vals(jj), settings.stage2_spatial_map_huber_scale_K, ...
+                            settings.stage2_spatial_map_truncation_K);
+                    end
+                    valley = EELS_PearsonSparse_FullFit.stage2_cost_valley(grid, local);
+                    uncertainty(yy, xx) = valley.uncertainty_K;
+                end
+            end
         end
 
         function [ene, y, y_norm, norm_val] = prepare_spectrum(ene_raw, y_raw, settings)
@@ -2314,6 +3929,24 @@ classdef EELS_PearsonSparse_FullFit
                 shape_bounds(2) .* ones(1, nz), ...
                 shape_bounds(2) .* ones(1, nz), ...
                 log(settings.T_soft_bounds(2))];
+            if isfield(settings, 'stage1_hierarchy_context') && isstruct(settings.stage1_hierarchy_context)
+                ctx = settings.stage1_hierarchy_context;
+                if isfield(ctx, 'enabled') && logical(ctx.enabled) && ...
+                        isfield(ctx, 'theta_lb') && isfield(ctx, 'theta_ub') && ...
+                        numel(ctx.theta_lb) == numel(lb) && numel(ctx.theta_ub) == numel(ub)
+                    h_lb = double(ctx.theta_lb(:).');
+                    h_ub = double(ctx.theta_ub(:).');
+                    good = isfinite(h_lb) & isfinite(h_ub) & h_ub > h_lb;
+                    lb(good) = max(lb(good), h_lb(good));
+                    ub(good) = min(ub(good), h_ub(good));
+                    bad = ub <= lb;
+                    if any(bad)
+                        mid = 0.5 .* (ub(bad) + lb(bad));
+                        lb(bad) = mid - 10 .* eps(max(abs(mid), 1));
+                        ub(bad) = mid + 10 .* eps(max(abs(mid), 1));
+                    end
+                end
+            end
         end
 
         function values = expand_component_setting(raw_values, n, fallback)
@@ -2340,7 +3973,8 @@ classdef EELS_PearsonSparse_FullFit
         function residual = stage1_objective(theta, ene, y_norm, EM, settings)
             fit = EELS_PearsonSparse_FullFit.decode_stage1(theta, ene, y_norm, EM, settings);
             residual = [fit.optimizer_residual; ...
-                EELS_PearsonSparse_FullFit.stage1_zlp_gain_asym_shape_residual(fit.params, settings)];
+                EELS_PearsonSparse_FullFit.stage1_zlp_gain_asym_shape_residual(fit.params, settings); ...
+                EELS_PearsonSparse_FullFit.stage1_hierarchical_zlp_residual(theta, settings)];
         end
 
         function fit = decode_stage1(theta, ene, y_norm, EM, settings)
@@ -2608,6 +4242,111 @@ classdef EELS_PearsonSparse_FullFit
             residual = sqrt(settings.stage1_zlp_gain_asym_shape_prior_weight) .* ...
                 [width_penalty(:); shape_penalty(:)];
             residual(~isfinite(residual)) = 0;
+        end
+
+        function phi = stage1_zlp_phi_from_theta(theta, settings)
+            nz = settings.num_zlp_components;
+            theta = double(theta(:).');
+            if numel(theta) < 1 + 5 .* nz
+                phi = NaN(1, 5 .* nz);
+                return;
+            end
+            center = theta(2:(1 + nz));
+            sL = theta((2 + nz):(1 + 2 .* nz));
+            sR = theta((2 + 2 .* nz):(1 + 3 .* nz));
+            mL = theta((2 + 3 .* nz):(1 + 4 .* nz));
+            mR = theta((2 + 4 .* nz):(1 + 5 .* nz));
+            center_scale = 1;
+            if isfield(settings, 'stage1_hierarchy_context') && isstruct(settings.stage1_hierarchy_context) && ...
+                    isfield(settings.stage1_hierarchy_context, 'center_scale_meV')
+                center_scale = max(abs(double(settings.stage1_hierarchy_context.center_scale_meV)), eps);
+            end
+            phi = [center ./ center_scale, log(max(sL, eps)), log(max(sR, eps)), ...
+                log(max(mL, eps)), log(max(mR, eps))];
+        end
+
+        function residual = stage1_hierarchical_zlp_residual(theta, settings)
+            residual = zeros(0, 1);
+            if ~isfield(settings, 'stage1_hierarchy_context') || ~isstruct(settings.stage1_hierarchy_context)
+                return;
+            end
+            ctx = settings.stage1_hierarchy_context;
+            if ~isfield(ctx, 'enabled') || ~logical(ctx.enabled)
+                return;
+            end
+            phi = EELS_PearsonSparse_FullFit.stage1_zlp_phi_from_theta(theta, settings);
+            if isempty(phi) || any(~isfinite(phi))
+                return;
+            end
+            nphi = numel(phi);
+            data_cost = 1;
+            if isfield(ctx, 'data_cost') && isfinite(ctx.data_cost) && ctx.data_cost > 0
+                data_cost = max(double(ctx.data_cost), 1e-10);
+            end
+            rows = {};
+            if isfield(ctx, 'template_phi') && numel(ctx.template_phi) == nphi
+                scale = EELS_PearsonSparse_FullFit.hierarchy_scale_vector(ctx, 'template_scale', nphi);
+                membership = 1;
+                if isfield(ctx, 'membership') && isfinite(ctx.membership)
+                    membership = min(max(double(ctx.membership), 0), 1);
+                end
+                frac = settings.stage1_cluster_template_cost_fraction .* membership;
+                if isfield(ctx, 'template_cost_fraction') && isfinite(ctx.template_cost_fraction)
+                    frac = max(0, double(ctx.template_cost_fraction)) .* membership;
+                end
+                if frac > 0
+                    u = (phi(:) - double(ctx.template_phi(:))) ./ scale(:);
+                    rows{end + 1} = sqrt(frac .* data_cost ./ max(nphi, 1)) .* u; %#ok<AGROW>
+                end
+            end
+            if settings.stage1_spatial_zlp_enabled && isfield(ctx, 'neighbor_phi') && ...
+                    size(ctx.neighbor_phi, 2) == nphi && ~isempty(ctx.neighbor_phi)
+                neighbor_phi = double(ctx.neighbor_phi);
+                neighbor_w = ones(size(neighbor_phi, 1), 1);
+                if isfield(ctx, 'neighbor_weight') && numel(ctx.neighbor_weight) == size(neighbor_phi, 1)
+                    neighbor_w = max(double(ctx.neighbor_weight(:)), 0);
+                end
+                keep = all(isfinite(neighbor_phi), 2) & isfinite(neighbor_w) & neighbor_w > 0;
+                neighbor_phi = neighbor_phi(keep, :);
+                neighbor_w = neighbor_w(keep);
+                if ~isempty(neighbor_phi)
+                    scale = EELS_PearsonSparse_FullFit.hierarchy_scale_vector(ctx, 'spatial_scale', nphi);
+                    delta = max(double(settings.stage1_spatial_zlp_huber_delta), eps);
+                    frac = max(double(settings.stage1_spatial_zlp_weight), 0);
+                    denom = max(nphi .* sum(neighbor_w), eps);
+                    for jj = 1:size(neighbor_phi, 1)
+                        u = (phi(:) - neighbor_phi(jj, :).') ./ scale(:);
+                        huber_r = EELS_PearsonSparse_FullFit.huber_pseudo_residual(u, delta);
+                        rows{end + 1} = sqrt(frac .* data_cost .* neighbor_w(jj) ./ denom) .* huber_r; %#ok<AGROW>
+                    end
+                end
+            end
+            if ~isempty(rows)
+                residual = vertcat(rows{:});
+                residual(~isfinite(residual)) = 0;
+            end
+        end
+
+        function scale = hierarchy_scale_vector(ctx, field_name, n)
+            scale = ones(1, n);
+            if isfield(ctx, field_name)
+                raw = double(ctx.(field_name)(:).');
+                if isscalar(raw)
+                    scale(:) = raw;
+                elseif numel(raw) == n
+                    scale = raw;
+                end
+            end
+            scale(~isfinite(scale) | scale <= 0) = 1;
+        end
+
+        function r = huber_pseudo_residual(u, delta)
+            u = double(u);
+            a = abs(u);
+            r = u;
+            tail = a > delta;
+            r(tail) = sign(u(tail)) .* sqrt(max(2 .* delta .* a(tail) - delta .^ 2, 0));
+            r(~isfinite(r)) = 0;
         end
 
         function shifted = shift_kernel(ene, kernel, delta)
@@ -3420,6 +5159,23 @@ classdef EELS_PearsonSparse_FullFit
             end
             result.original_settings = settings;
             result.settings = effective_settings;
+            hierarchy_ctx = struct();
+            if isfield(settings, 'stage1_hierarchy_context') && isstruct(settings.stage1_hierarchy_context)
+                hierarchy_ctx = settings.stage1_hierarchy_context;
+            end
+            if isfield(hierarchy_ctx, 'enabled') && hierarchy_ctx.enabled
+                result.stage1_hierarchy = struct('enabled', true, 'status', 'hierarchical_pixel_fit', ...
+                    'cluster_label', EELS_PearsonSparse_FullFit.struct_scalar(hierarchy_ctx, 'cluster_label', 0), ...
+                    'membership', EELS_PearsonSparse_FullFit.struct_scalar(hierarchy_ctx, 'membership', 0));
+            elseif settings.stage1_hierarchical_enabled
+                result.stage1_hierarchy = struct('enabled', false, 'status', 'single_spectrum_fallback', ...
+                    'cluster_label', 0, 'membership', 0);
+            else
+                result.stage1_hierarchy = struct('enabled', false, 'status', 'disabled', ...
+                    'cluster_label', 0, 'membership', 0);
+            end
+            result.original_settings.stage1_hierarchy_context = struct();
+            result.settings.stage1_hierarchy_context = struct();
             result.stage1_pm_ratio_reliability = EELS_PearsonSparse_FullFit.stage1_pm_ratio_reliability(result, effective_settings);
             result.stage2 = EELS_PearsonSparse_FullFit.solve_stage2_temperature_window(result, effective_settings);
             if isfield(result.stage2, 'T_fit') && result.stage2.enabled && strcmp(result.stage2.status, 'ok')
@@ -5725,25 +7481,62 @@ classdef EELS_PearsonSparse_FullFit
                 info.energy_points = numel(ene);
                 return;
             end
-            S = load(filename);
-            names = fieldnames(S);
+            vars = whos('-file', filename);
             cube = [];
             ene = [];
             info = struct('source_file', filename, 'source_variable', '');
-            for ii = 1:numel(names)
-                val = S.(names{ii});
+            names = {vars.name};
+            object_candidates = find(strcmp({vars.class}, 'EELS') | ...
+                contains(lower(string(names)), 'eels'));
+            for jj = 1:numel(object_candidates)
+                ii = object_candidates(jj);
+                try
+                    loaded = load(filename, names{ii});
+                    val = loaded.(names{ii});
+                catch
+                    continue;
+                end
                 if isobject(val) && isprop(val, 'data') && isprop(val, 'ene')
                     cube = double(val.data);
                     ene = double(val.ene(:));
                     info.source_variable = names{ii};
                     info.source_class = class(val);
+                    if isprop(val, 'info') && isstruct(val.info)
+                        object_info = val.info;
+                        object_info.source_file = filename;
+                        object_info.source_variable = names{ii};
+                        object_info.source_class = class(val);
+                        info = object_info;
+                    end
                     break;
-                elseif isnumeric(val) && ndims(val) == 3 && isempty(cube)
-                    cube = double(val);
+                end
+            end
+            numeric_classes = {'double', 'single', 'uint8', 'uint16', 'uint32', 'uint64', ...
+                'int8', 'int16', 'int32', 'int64', 'logical'};
+            if isempty(cube)
+                for ii = 1:numel(vars)
+                    if ~ismember(vars(ii).class, numeric_classes) || numel(vars(ii).size) ~= 3
+                        continue;
+                    end
+                    loaded = load(filename, names{ii});
+                    cube = double(loaded.(names{ii}));
                     info.source_variable = names{ii};
-                    info.source_class = class(val);
-                elseif isnumeric(val) && isvector(val) && (contains(lower(names{ii}), 'ene') || contains(lower(names{ii}), 'energy'))
-                    ene = double(val(:));
+                    info.source_class = vars(ii).class;
+                    break;
+                end
+            end
+            if isempty(ene)
+                for ii = 1:numel(vars)
+                    lname = lower(names{ii});
+                    if ~ismember(vars(ii).class, numeric_classes) || ...
+                            ~(contains(lname, 'ene') || contains(lname, 'energy')) || ...
+                            sum(vars(ii).size > 1) > 1
+                        continue;
+                    end
+                    loaded = load(filename, names{ii});
+                    energy_value = loaded.(names{ii});
+                    ene = double(energy_value(:));
+                    break;
                 end
             end
             if isempty(cube)
@@ -7329,6 +9122,11 @@ classdef EELS_PearsonSparse_FullFit
                 rl.reason = 'too_few_energy_points';
                 return;
             end
+            pre_subtracted = isfield(res, 'rl_input_is_background_subtracted') && ...
+                isscalar(res.rl_input_is_background_subtracted) && ...
+                logical(res.rl_input_is_background_subtracted);
+            has_explicit_kernel = isfield(res, 'rl_kernel_norm') && ...
+                numel(res.rl_kernel_norm) >= n;
             if isfield(res, 'raw_data_norm') && numel(res.raw_data_norm) >= n
                 raw_norm = res.raw_data_norm(:);
                 raw_norm = raw_norm(1:n);
@@ -7343,6 +9141,8 @@ classdef EELS_PearsonSparse_FullFit
                 params = res.stage1.params;
             elseif isfield(res, 'zlp_params')
                 params = res.zlp_params;
+            elseif has_explicit_kernel
+                params = struct();
             else
                 rl.reason = 'missing_zlp_kernel_params';
                 return;
@@ -7351,7 +9151,10 @@ classdef EELS_PearsonSparse_FullFit
             zlp_norm = zeros(n, 1);
             bg_norm = zeros(n, 1);
             reference_vib = zeros(n, 1);
-            if isfield(res, 'stage2') && isstruct(res.stage2) && isfield(res.stage2, 'status') && ...
+            if has_explicit_kernel
+                tmp = double(res.rl_kernel_norm(:));
+                zlp_norm = tmp(1:n);
+            elseif isfield(res, 'stage2') && isstruct(res.stage2) && isfield(res.stage2, 'status') && ...
                     strcmp(res.stage2.status, 'ok')
                 if isfield(res.stage2, 'zlp_norm') && numel(res.stage2.zlp_norm) >= n
                     tmp = res.stage2.zlp_norm(:); zlp_norm = tmp(1:n);
@@ -7385,7 +9188,14 @@ classdef EELS_PearsonSparse_FullFit
                 end
             end
 
-            target = raw_norm(:) - zlp_norm(:) - bg_norm(:);
+            if pre_subtracted
+                target = raw_norm(:);
+                bg_norm = zeros(n, 1);
+                reference_vib = target(:);
+                rl.source = 'current_background_subtracted_data_with_transferred_zlp_kernel';
+            else
+                target = raw_norm(:) - zlp_norm(:) - bg_norm(:);
+            end
             eabs = abs(ene(:));
             e_lo = max(0, settings.rl_deconv_min_energy_meV);
             e_hi = max(e_lo + eps, settings.rl_deconv_max_energy_meV);

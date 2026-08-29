@@ -7,7 +7,7 @@ zero-loss peak estimation, sparse-convolution signal reconstruction, sparse
 phonon-mode source-intensity analysis, and attention-guided Bose-Einstein
 thermometry.
 
-## What Version 2.0 Does
+## What Version 2.1 Does
 
 The workflow separates spectral reconstruction from temperature inference:
 
@@ -15,15 +15,29 @@ The workflow separates spectral reconstruction from temperature inference:
    It fits the complete ZLP and uses the fitted total ZLP, centered at `0 meV`
    on an aligned energy axis, as the convolution kernel for sparse Stokes and
    anti-Stokes phonon-mode source intensities.
-2. **Stage 2 estimates temperature from selected evidence.**
+2. **Datacube Stage 1 learns spatially coherent ZLP families.**
+   A ZLP-only probe is clustered with deterministic robust k-means. Each class
+   receives a shared ZLP template. Soft membership continuously blends template
+   targets and admissible parameter ranges, avoiding hard changes at class
+   boundaries. Stage 1 also applies an
+   edge-aware eight-neighbor Huber loss on peak center, width, shape, and
+   asymmetry. ZLP amplitude and phonon source intensities remain pixel-local.
+3. **Stage 2 estimates temperature from selected evidence.**
    Paired modes with strong attention constrain the Bose-Einstein temperature.
    Remaining modes stay in the full-spectrum fit as independent soft
    source-intensity coefficients, so mixed phases, tails, and non-equilibrium
    signal can be fitted without controlling the reported temperature.
-3. **Diagnostics explain the result.**
+4. **ZLP differences define sharp interfaces and safe one-way inference.**
+   A robust ZLP-only edge score marks sharp interfaces and disables Stage 1
+   spatial coupling across them. Data-valid temperatures are never smoothed or
+   moved. A data-invalid pixel may receive a marked, ZLP-guided estimate only
+   from at least two valid same-side neighbors; inferred pixels never feed back
+   into valid anchors.
+5. **Diagnostics explain the result.**
    Outputs include fit residuals, sparse source-intensity distributions,
    hard/soft mode partitions, BE linearity, the temperature cost valley,
-   uncertainty, reliability, and spatial maps for datacubes.
+   uncertainty, reliability, ZLP clusters, ZLP interface score/mask,
+   raw/data-valid/ZLP-guided temperature, and inference masks for datacubes.
 
 The default hard-pair score is:
 
@@ -57,6 +71,8 @@ settings = struct();
 settings.run_stage2 = true;
 settings.crop_range = [-250, 250];
 settings.stage2_temperature_algorithm = 'grid_scan';
+settings.stage1_hierarchical_enabled = true;
+settings.stage2_spatial_map_enabled = true;
 
 result = eels_fit_spectrum(energy_meV, spectrum, settings);
 ```
@@ -89,12 +105,19 @@ run(fullfile('examples', 'zest_datacube_full_stage2_parallel.m'));
 2. Align the ZLP to `0 meV` when needed.
 3. Apply rank-limited SVD/PCA denoising.
 4. Crop to the useful energy interval, normally `[-250, 250] meV`.
-5. Run Stage 1 and inspect ZLP, reconstructed signal, residual, R2, and NRMSE.
-6. Run Stage 2 where paired gain/loss evidence supports thermometry.
-7. Inspect hard-pair BE linearity, the temperature cost valley, reliability,
-   and uncertainty before interpreting the temperature map.
+5. Run the full datacube with the hierarchical model enabled, then inspect ZLP
+   clusters, membership, outliers, template deviation, residual, R2, and NRMSE.
+6. Inspect hard-pair BE linearity and the raw temperature cost valley.
+7. Use Data-valid as the primary temperature map. Compare Raw and the optional
+   ZLP-guided result, and inspect the sharp-interface and inferred masks before
+   interpreting spatial trends.
 
-For a saved Stage 1 datacube result:
+The v2.1 GUI reports template polish, each spatial color pass, and final
+Stage 2 separately. Cancel is checked between bounded parallel batches.
+Full-cube numerical results are saved before optional plots, and automatic
+large diagnostic-figure export is disabled by default.
+
+For a saved v2.1 Stage 1 datacube result:
 
 ```matlab
 stage2_settings = struct();
@@ -106,6 +129,10 @@ stage2_cuberes = ...
         stage1_cuberes, stage2_settings);
 ```
 
+Reusing a pre-v2.1 Stage 1 result preserves its original ZLP fit; hierarchical
+Stage 1 constraints cannot be added retroactively. Run `eels_fit_datacube`
+again when the new ZLP clustering and spatial loss are required.
+
 ## Main Entry Points
 
 | File | Purpose |
@@ -115,6 +142,8 @@ stage2_cuberes = ...
 | `eels_fit_datacube.m` | Fit a spectrum image from a file |
 | `EELS_PearsonSparse_FullFit.m` | Core Stage 1/Stage 2 solver and diagnostics |
 | `EELS_ZEST_App.m` | GUI implementation |
+| `EELS_ZEST_DataOps.m` | sparse-source cutoff, reconvolution, STA, and EELS export |
+| `EELS_ZEST_PeakFit.m` | robust Gaussian, Lorentzian, and Pseudo-Voigt multi-peak fitting |
 | `examples/` | Runnable scripts |
 | `docs/example_data_figures/` | Figure data, CSV panels, SVG/PNG/TIFF figures, and reproduction scripts |
 | `index.html` | Project documentation webpage |
@@ -135,6 +164,26 @@ Ny x Nx x Ne
 
 where `Ne` is the number of energy channels.
 
+## Data Tools In Version 2.1
+
+- **Send signal to Data** truncates Stage 1 or Stage 2 sparse phonon source
+  intensities using a manual energy, a Materials Project phonon JSON cutoff,
+  or the Stage 2 hard-attention edge plus a tail. It then reconvolves the
+  retained source with the same fitted-ZLP kernel, so the reconstructed
+  background-subtracted phonon spectrum retains its natural convolution tail.
+  The fitted-ZLP kernel cube and Stage 1/Stage 2 temperature maps are transferred
+  with the Data state and retained in `EELS.info`; RL therefore acts on the
+  displayed cutoff spectrum, while STA can reuse the corresponding temperature.
+- **Multiply STA** keeps the positive-loss side and applies
+  `I(E)*E/2*[1-exp(-E/(kB*T))]` using a manual temperature, Stage 1 soft
+  temperature, or Stage 2 temperature with a Stage 1 fallback.
+- **Stack Spectra** uses a nonblocking map-selection window for points and
+  rectangles. **Multi-peak fit** supports ROI, x-line, and full-cube robust
+  Gaussian, Lorentzian, and Pseudo-Voigt fits.
+- **Export data** writes the currently displayed processing state as an
+  `EELS` object. Other export controls save MAT/CSV and, where applicable,
+  FIG/SVG/PNG/TIFF files; base-workspace assignment is optional.
+
 ## Core Outputs
 
 Single-spectrum results include:
@@ -147,8 +196,12 @@ Single-spectrum results include:
 Datacube results include:
 
 - `R2_map`, `NRMSE_map`, `fit_status_map`
-- `T_map_raw`, `T_map_repaired`, `T_map_spatial_refined`
-- `T_uncertainty_map`, `reliability_score_map`, `attention_score_map`
+- `T_map_raw`, `T_map_data_valid`, `T_map_joint`, `T_map_spatial_refined`
+- `T_uncertainty_map`, `T_uncertainty_joint_map`, `T_spatial_inferred_mask`
+- `cluster_label_map`, `cluster_membership_map`, `cluster_outlier_mask`
+- `template_deviation_map`, `zlp_spatial_loss_map`, `T_joint_shift_map`
+- `zlp_interface_score_map`, `zlp_interface_mask`, and directional edge maps
+- `reliability_score_map`, `attention_score_map`
 - `warning_map`, `bad_pixel_mask`, `interface_mask`
 
 ## Example Figure Reproduction

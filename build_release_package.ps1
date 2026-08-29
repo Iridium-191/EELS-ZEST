@@ -1,6 +1,6 @@
 param(
-    [string]$Version = '2.0.0',
-    [string]$ReleaseDate = '20260729',
+    [string]$Version = '2.1.0',
+    [string]$ReleaseDate = '20260828',
     [string]$Profile = 'example_data'
 )
 
@@ -11,6 +11,7 @@ $packageName = "EELS-ZEST_v${Version}_${ReleaseDate}_${Profile}"
 $stageDir = Join-Path $releaseRoot $packageName
 $packageDir = Join-Path $stageDir 'EELS-ZEST'
 $zipFile = Join-Path $releaseRoot ($packageName + '.zip')
+$zipChecksumFile = $zipFile + '.sha256'
 
 New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
 $releaseRootResolved = (Resolve-Path -LiteralPath $releaseRoot).Path
@@ -30,12 +31,21 @@ if (Test-Path -LiteralPath $zipFile) {
     }
     Remove-Item -LiteralPath $zipResolved -Force
 }
+if (Test-Path -LiteralPath $zipChecksumFile) {
+    $checksumResolved = (Resolve-Path -LiteralPath $zipChecksumFile).Path
+    $prefix = $releaseRootResolved.TrimEnd('\') + '\'
+    if (-not $checksumResolved.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove checksum outside release root: $checksumResolved"
+    }
+    Remove-Item -LiteralPath $checksumResolved -Force
+}
 
 New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
 
 $rootFiles = @(
     'README.md', 'README_zh-CN.md',
     'VERSION.txt', 'VERSION_NOTES.md', 'NOTICE.md',
+    'PACKAGE_CONTENTS.md', 'RELEASE_AUDIT.md',
     'LICENSE', 'CITATION.cff',
     '.gitignore', 'build_release_package.ps1',
     'index.html', 'logo.png', 'intmodes.mat', 'PK1.mat'
@@ -52,6 +62,9 @@ $runtimeFiles = @(
     'eels_fit_datacube.m', 'eels_fit_spectrum.m',
     'EELS_PearsonSparse_FullFit.m',
     'EELS_TwoStage_Toolbox.m', 'EELS_ZEST_App.m',
+    'EELS_ZEST_DataOps.m', 'EELS_ZEST_Export.m',
+    'EELS_ZEST_CutoffDialog.m', 'EELS_ZEST_ExportDialog.m',
+    'EELS_ZEST_StackTool.m', 'EELS_ZEST_PeakFit.m', 'EELS_ZEST_PeakFitTool.m',
     'run_eels_twostage_toolbox.m', 'run_eels_zest.m'
 )
 foreach ($name in $runtimeFiles) {
@@ -95,7 +108,7 @@ $docFiles = @(
     'GUI_TOOLBOX_GUIDE.md',
     'LOSS_AND_ATTENTION_THEORY_v1.3.md',
     'theory.html',
-    'EELS_ZEST_2p0_workflow.png', 'EELS_ZEST_2p0_workflow.svg'
+    'EELS_ZEST_2p1_workflow.png', 'EELS_ZEST_2p1_workflow.svg'
 )
 foreach ($name in $docFiles) {
     $src = Join-Path $sourceDir "docs\$name"
@@ -155,12 +168,17 @@ $checksumLines = $manifestRows | ForEach-Object { "{0}  {1}" -f $_.SHA256, $_.Pa
 Compress-Archive -LiteralPath $packageDir -DestinationPath $zipFile -CompressionLevel Optimal
 
 $zipHash = (Get-FileHash -LiteralPath $zipFile -Algorithm SHA256).Hash.ToLowerInvariant()
+[IO.File]::WriteAllText(
+    $zipChecksumFile,
+    ("{0}  {1}`n" -f $zipHash, (Split-Path $zipFile -Leaf)),
+    [Text.UTF8Encoding]::new($false))
 $fileCount = (Get-ChildItem -LiteralPath $packageDir -Recurse -File).Count
 $bytes = (Get-ChildItem -LiteralPath $packageDir -Recurse -File | Measure-Object Length -Sum).Sum
 
 [pscustomobject]@{
     PackageDirectory = $packageDir
     Archive = $zipFile
+    ArchiveChecksum = $zipChecksumFile
     Files = $fileCount
     UncompressedMB = [math]::Round($bytes / 1MB, 2)
     ArchiveMB = [math]::Round((Get-Item -LiteralPath $zipFile).Length / 1MB, 2)

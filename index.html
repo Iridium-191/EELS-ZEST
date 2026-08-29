@@ -6,6 +6,7 @@
   <title>EELS-ZEST Documentation</title>
   <meta name="description" content="EELS-ZEST documentation for zero-loss estimation, sparse phonon-mode source-intensity reconstruction, and attention-guided thermometry.">
   <meta name="author" content="Ruilin Mao, International Center for Quantum Materials (ICQM), Peking University">
+  <link rel="icon" type="image/png" href="logo.png">
   <style>
     :root {
       --page: #eef1f3;
@@ -508,7 +509,7 @@
           </div>
         </div>
       </div>
-      <div class="version">Version 2.0.0</div>
+      <div class="version">Version 2.1.0</div>
       <div class="nav-title">Contents</div>
       <nav>
         <ul class="toc">
@@ -533,7 +534,7 @@
       <div class="topbar">
         <div class="topbar-left">
           <button class="menu-button" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar" title="Open navigation">&#9776;</button>
-          <span><a href="#overview">EELS-ZEST documentation</a> / <code>v2.0.0</code></span>
+          <span><a href="#overview">EELS-ZEST documentation</a> / <code>v2.1.0</code></span>
         </div>
         <div class="topbar-right">MATLAB workflow for STEM-EELS</div>
       </div>
@@ -552,22 +553,27 @@
         <section>
           <h2>1. Overview</h2>
           <p>
-            Version 2.0 separates spectral reconstruction from temperature
-            inference. The complete spectrum remains in the fit, while only
-            reliable paired gain/loss evidence controls thermometry.
+            Version 2.1 adds ZLP-only hierarchical clustering and a true
+            Stage 1 spatial loss for datacubes. Spectral reconstruction remains
+            separate from temperature inference. Soft membership blends ZLP
+            template constraints, while a ZLP-only score marks sharp interfaces.
           </p>
           <div class="feature-grid">
             <div class="feature">
               <strong>Stage 1</strong>
-              <p>Fit the complete ZLP and reconstruct sparse vibrational signal.</p>
+              <p>Fit the complete ZLP, learn class templates, and reconstruct sparse vibrational signal.</p>
             </div>
             <div class="feature">
               <strong>Stage 2</strong>
               <p>Apply hard BE constraints to paired attention modes and independent soft source intensities elsewhere.</p>
             </div>
             <div class="feature">
-              <strong>Diagnostics</strong>
-              <p>Inspect residuals, sparse source intensities, BE linearity, cost valley, uncertainty, and maps.</p>
+              <strong>ZLP-guided inference</strong>
+              <p>Keep data-valid temperatures fixed and infer only marked invalid pixels from same-side ZLP-similar anchors.</p>
+            </div>
+            <div class="feature">
+              <strong>Data tools</strong>
+              <p>Cut off and reconvolve sparse phonon sources, multiply STA, stack ROIs, fit multiple peaks, and export files without hidden processing.</p>
             </div>
           </div>
           <div class="note">
@@ -602,6 +608,8 @@
 settings.run_stage2 = true;
 settings.crop_range = [-250, 250];
 settings.stage2_temperature_algorithm = 'grid_scan';
+settings.stage1_hierarchical_enabled = true;
+settings.stage2_spatial_map_enabled = true;
 
 result = eels_fit_spectrum(energy_meV, spectrum, settings);</code></pre>
 
@@ -629,9 +637,10 @@ run(fullfile('examples', 'zest_datacube_full_stage2_parallel.m'));</code></pre>
             <li>Align the ZLP to <code>0 meV</code> when needed.</li>
             <li>Apply rank-limited SVD/PCA denoising.</li>
             <li>Crop to the useful energy interval, normally <code>[-250, 250] meV</code>.</li>
-            <li>Run Stage 1 and inspect ZLP, signal reconstruction, residual, R2, and NRMSE.</li>
-            <li>Run Stage 2 where paired gain/loss evidence supports thermometry.</li>
-            <li>Inspect hard-pair BE linearity, the temperature cost valley, uncertainty, and reliability.</li>
+            <li>Run the full datacube with hierarchical Stage 1 enabled.</li>
+            <li>Inspect ZLP cluster, soft membership, interface score/mask, template deviation, residual, R2, and NRMSE maps.</li>
+            <li>Inspect hard-pair BE linearity and the raw temperature cost valley.</li>
+            <li>Use Data-valid as the primary temperature view; compare Raw and optional ZLP-guided inferred values.</li>
             <li>Export fitted spectra, sparse source-intensity products, maps, and diagnostics.</li>
           </ol>
         </section>
@@ -643,9 +652,9 @@ run(fullfile('examples', 'zest_datacube_full_stage2_parallel.m'));</code></pre>
               <tr><th>Page</th><th>Purpose</th></tr>
             </thead>
             <tbody>
-              <tr><td>Data</td><td>Load data, inspect maps, align ZLP, run SVD denoising, select an ROI, and run RL conversion after fitting.</td></tr>
-              <tr><td>Stage 1</td><td>Reconstruct one pixel or a complete datacube with fitted ZLP and sparse phonon-mode source intensities.</td></tr>
-              <tr><td>Stage 2</td><td>Reuse Stage 1 and perform attention-guided thermometry.</td></tr>
+              <tr><td>Data</td><td>Load EELS data, align and denoise it, select or stack ROIs, cut off and reconvolve sparse phonon sources, transfer fitted-ZLP kernels and temperature context, multiply STA, run RL conversion on the displayed spectrum, fit multiple peaks, and export the displayed state.</td></tr>
+              <tr><td>Stage 1</td><td>Reconstruct one pixel or learn datacube ZLP classes, class templates, spatially regularized shape parameters, and sparse phonon-mode source intensities.</td></tr>
+              <tr><td>Stage 2</td><td>Perform attention-guided thermometry and expose Raw, Data-valid, ZLP-guided, uncertainty, and interface/inference maps.</td></tr>
               <tr><td>Phonon Intensity</td><td>Build signed source-intensity cubes, integral maps, NMF components, and clusters.</td></tr>
             </tbody>
           </table>
@@ -653,6 +662,12 @@ run(fullfile('examples', 'zest_datacube_full_stage2_parallel.m'));</code></pre>
             Start with one representative pixel. Once its decomposition and
             residual are satisfactory, run the complete datacube in serial or
             parallel mode.
+          </p>
+          <p>
+            Version 2.1 reports template polish, each spatial color pass, and final
+            Stage 2 separately. Cancel is checked between bounded parallel
+            batches. Numerical MAT and summary files are saved before optional
+            plots; automatic large diagnostic-figure export is disabled by default.
           </p>
           <p><a href="docs/GUI_TOOLBOX_GUIDE.md">Open the GUI guide</a></p>
         </section>
@@ -688,7 +703,11 @@ run(fullfile('examples', 'zest_datacube_full_stage2_parallel.m'));</code></pre>
           <h3>Datacube fields</h3>
           <ul>
             <li><code>R2_map</code>, <code>NRMSE_map</code>, <code>fit_status_map</code></li>
-            <li><code>T_map_raw</code>, <code>T_map_repaired</code>, <code>T_map_spatial_refined</code></li>
+            <li><code>T_map_raw</code>, <code>T_map_data_valid</code>, <code>T_map_joint</code>, <code>T_map_spatial_refined</code></li>
+            <li><code>T_uncertainty_joint_map</code>, <code>T_spatial_inferred_mask</code>, <code>T_joint_shift_map</code></li>
+            <li><code>cluster_label_map</code>, <code>cluster_membership_map</code>, <code>cluster_outlier_mask</code></li>
+            <li><code>template_deviation_map</code>, <code>zlp_spatial_loss_map</code></li>
+            <li><code>zlp_interface_score_map</code>, <code>zlp_interface_mask</code>, and directional edge maps</li>
             <li><code>T_uncertainty_map</code>, <code>reliability_score_map</code>, <code>attention_score_map</code></li>
             <li><code>warning_map</code>, <code>bad_pixel_mask</code>, <code>interface_mask</code></li>
           </ul>
@@ -697,10 +716,11 @@ run(fullfile('examples', 'zest_datacube_full_stage2_parallel.m'));</code></pre>
         <section id="theory">
           <h2>8. Theory</h2>
           <p>
-            The method documentation covers the ZLP model, sparse convolution,
-            hard/soft source-intensity partition, loss terms, paired attention
-            score, BE linearity, temperature profile, uncertainty, and
-            reliability.
+            The method documentation covers the ZLP model, ZLP-only clustering,
+            class-template and spatial Huber losses, sparse convolution,
+            hard/soft source-intensity partition, paired attention, BE
+            linearity, raw and data-valid temperature, ZLP-guided one-way
+            inference, uncertainty, and reliability.
           </p>
           <ul>
             <li><a href="docs/theory.html">Rendered theory and methods</a></li>
@@ -833,9 +853,15 @@ run(fullfile('examples', 'zest_datacube_full_stage2_parallel.m'));</code></pre>
         }
       });
 
-      window.matchMedia('(min-width: 901px)').addEventListener('change', (event) => {
+      const media = window.matchMedia('(min-width: 901px)');
+      const handleMediaChange = (event) => {
         if (event.matches) setNavigationOpen(false);
-      });
+      };
+      if (media.addEventListener) {
+        media.addEventListener('change', handleMediaChange);
+      } else {
+        media.addListener(handleMediaChange);
+      }
 
       const observer = new IntersectionObserver((entries) => {
         const visible = entries

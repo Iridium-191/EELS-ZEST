@@ -131,7 +131,7 @@
             [fig_pos, resolved_mode] = app.responsiveFigurePosition(app.LayoutMode);
             app.LayoutMode = resolved_mode;
             app.IsCompact = strcmp(resolved_mode, 'compact');
-            app.UIFigure = uifigure('Name', 'EELS Two-Stage Sparse Convolution Toolbox', ...
+            app.UIFigure = uifigure('Name', 'EELS-ZEST 2.1 Two-Stage Toolbox', ...
                 'Position', fig_pos, 'Color', [0.94 0.97 1.00], 'Visible', visible);
             rootLayout = uigridlayout(app.UIFigure, [1 1]);
             rootLayout.Padding = [0 0 0 0];
@@ -465,7 +465,7 @@
             workers = uispinner(g, 'Limits', [1 64], 'Value', 8, 'Step', 1);
             checkpoint = uicheckbox(g, 'Text', '断点保存', 'Value', true);
             resume = uicheckbox(g, 'Text', '断点续跑', 'Value', false);
-            saveplots = uicheckbox(g, 'Text', '保存诊断图', 'Value', true);
+            saveplots = uicheckbox(g, 'Text', '保存诊断图', 'Value', false);
             lab = app.techLabel(g, '输出目录');
             outdir = uieditfield(g, 'text', 'Value', app.LastOutputDir);
             lab.Layout.Row = 3; lab.Layout.Column = 1;
@@ -508,17 +508,21 @@
                 b = app.techButton(g, '送信号回数据页', @(~, ~)app.importFitSignalToData()); b.Layout.Row = 5; b.Layout.Column = [7 8];
                 lab = app.techLabel(g, '显示map');
                 lab.Layout.Row = 5; lab.Layout.Column = 9;
-                app.Stage2MapDropDown = uidropdown(g, 'Items', app.mapItems(), 'Value', 'T spatial refined', ...
+                app.Stage2MapDropDown = uidropdown(g, 'Items', app.mapItems(), 'Value', 'T data valid', ...
                     'ValueChangedFcn', @(~, ~)app.refreshResultMap(true));
                 app.Stage2MapDropDown.Layout.Row = 5; app.Stage2MapDropDown.Layout.Column = [10 12];
                 b = app.techButton(g, '2σ联合修正离群', @(~, ~)app.refitReliabilityOutliers());
                 b.Layout.Row = 6; b.Layout.Column = [1 3];
                 outlierNote = uilabel(g, 'Text', '复用Stage1，联合检查Reliability/R2/NRMSE/T不确定度的2σ离群点');
-                outlierNote.Layout.Row = 6; outlierNote.Layout.Column = [4 9];
+                outlierNote.Layout.Row = 6; outlierNote.Layout.Column = [4 6];
                 outlierNote.FontColor = [0.05 0.30 0.48];
+                hierarchical = uicheckbox(g, 'Text', '分层ZLP + ZLP界面引导', 'Value', true);
+                hierarchical.Tooltip = '启用ZLP谱形聚类、类模板约束、Stage1空间平滑和联合温度MAP。';
+                hierarchical.Layout.Row = 6; hierarchical.Layout.Column = [7 9];
                 forceRawStage2 = uicheckbox(g, 'Text', '强制显示Stage2', 'Value', false);
                 forceRawStage2.Tooltip = '勾选后关闭Stage2谱形保护，不回退到Stage1，用于查看硬BE强行拟合的真实形状。';
                 forceRawStage2.Layout.Row = 6; forceRawStage2.Layout.Column = [10 12];
+                ctrl.hierarchical = hierarchical;
                 ctrl.forceRawStage2 = forceRawStage2;
                 ctrl.mapDropDown = app.Stage2MapDropDown;
                 app.Stage2Controls = ctrl;
@@ -537,7 +541,7 @@
                 ctrl.mapDropDown = app.MapDropDown;
                 app.Stage1Controls = ctrl;
             end
-            note = uilabel(g, 'Text', '串行默认保存断点；并行默认保存诊断图，并按像素更新进度与ETA。');
+            note = uilabel(g, 'Text', '串行默认保存断点；并行先保存数值结果，诊断图建议按需导出。');
             note.Layout.Row = 6; note.Layout.Column = [1 12];
             note.FontColor = [0.18 0.33 0.50];
         end
@@ -582,7 +586,7 @@
             cropMax.Layout.Row = 3; cropMax.Layout.Column = 3;
             inheritBtn = app.techButton(g, '继承数据页', @(~, ~)app.inheritStageEnergyWindow(stage2));
             inheritBtn.Layout.Row = 3; inheritBtn.Layout.Column = [4 5];
-            saveplots = uicheckbox(g, 'Text', '保存诊断图', 'Value', true);
+            saveplots = uicheckbox(g, 'Text', '保存诊断图', 'Value', false);
             saveplots.Layout.Row = 3; saveplots.Layout.Column = [6 8];
 
             lab = app.techLabel(g, '输出目录'); lab.Layout.Row = 4; lab.Layout.Column = 1;
@@ -595,9 +599,9 @@
                     'Items', {'grid_scan'}, 'Value', 'grid_scan');
                 app.Stage2AlgorithmDropDown.Layout.Row = 5;
                 app.Stage2AlgorithmDropDown.Layout.Column = [2 4];
-                algoNote = uilabel(g, 'Text', 'Stage2：attention 成对区域硬 BE，其余模态能量使用独立软源强度；温度采用 grid scan。');
-                algoNote.Layout.Row = 5; algoNote.Layout.Column = [5 6];
-                algoNote.FontColor = [0.05 0.30 0.48];
+                hierarchical = uicheckbox(g, 'Text', '分层ZLP + ZLP界面引导', 'Value', true);
+                hierarchical.Tooltip = '启用ZLP谱形聚类、类模板约束、Stage1空间平滑和联合温度MAP。';
+                hierarchical.Layout.Row = 5; hierarchical.Layout.Column = [5 6];
                 forceRawStage2 = uicheckbox(g, 'Text', '强制显示Stage2', 'Value', false);
                 forceRawStage2.Tooltip = '勾选后关闭Stage2谱形保护，不回退到Stage1，用于查看硬BE强行拟合的真实形状。';
                 forceRawStage2.Layout.Row = 5; forceRawStage2.Layout.Column = [7 8];
@@ -634,9 +638,10 @@
                 b = app.techButton(g, '送信号回数据页', @(~, ~)app.importFitSignalToData()); b.Layout.Row = 7; b.Layout.Column = [3 4];
                 b = app.techButton(g, '2σ联合修正离群', @(~, ~)app.refitReliabilityOutliers()); b.Layout.Row = 7; b.Layout.Column = [5 6];
                 lab = app.techLabel(g, '显示map'); lab.Layout.Row = 7; lab.Layout.Column = 7;
-                app.Stage2MapDropDown = uidropdown(g, 'Items', app.mapItems(), 'Value', 'T spatial refined', ...
+                app.Stage2MapDropDown = uidropdown(g, 'Items', app.mapItems(), 'Value', 'T data valid', ...
                     'ValueChangedFcn', @(~, ~)app.refreshResultMap(true));
                 app.Stage2MapDropDown.Layout.Row = 7; app.Stage2MapDropDown.Layout.Column = 8;
+                ctrl.hierarchical = hierarchical;
                 ctrl.forceRawStage2 = forceRawStage2;
                 ctrl.mapDropDown = app.Stage2MapDropDown;
                 app.Stage2Controls = ctrl;
@@ -655,7 +660,7 @@
                 app.Stage1Controls = ctrl;
             end
 
-            note = uilabel(g, 'Text', '串行默认保存断点；并行默认保存诊断图，并按像素更新进度与ETA。');
+            note = uilabel(g, 'Text', '串行默认保存断点；并行先保存数值结果，诊断图建议按需导出。');
             note.Layout.Row = 8; note.Layout.Column = [1 8];
             note.FontColor = [0.18 0.33 0.50];
         end
@@ -728,11 +733,15 @@
         end
 
         function items = mapItems(~)
-            items = {'R2', 'NRMSE', 'T raw', 'T repaired', 'T spatial refined', ...
+            items = {'R2', 'NRMSE', 'T raw', 'T data valid', 'T joint', ...
+                'T joint uncertainty', 'Spatial inferred', 'T repaired', 'T spatial refined', ...
                 'T uncertainty', 'Reliability', 'Attention fraction', 'Warning', ...
                 'Bad pixel', 'Interface', 'Neighbor loss', 'Spectrum neighbor loss', ...
                 'Temperature neighbor z', 'Attention peak delta', 'Signal peak delta', ...
-                'ZLP guard start', 'ZLP guard fraction', 'ZLP core width'};
+                'ZLP guard start', 'ZLP guard fraction', 'ZLP core width', ...
+                'ZLP cluster', 'Cluster membership', 'Cluster outlier', ...
+                'Template deviation', 'ZLP spatial loss', 'ZLP interface score', ...
+                'ZLP sharp interface'};
         end
 
         function tf = hasExternalTool(app, function_name, display_name)
@@ -1139,8 +1148,6 @@
                 case "parallel"
                     settings.datacube_parallel_enabled = true;
                     settings.datacube_resume_checkpoint = false;
-                    settings.save_plots = true;
-                    settings.save_diagnostic_plots = true;
                     settings.close_parallel_pool_after_run = true;
                 otherwise
                     settings.datacube_parallel_enabled = false;
@@ -1150,6 +1157,14 @@
             settings.datacube_progress_every = 1;
             if stage2 && ~isempty(app.Stage2AlgorithmDropDown) && isvalid(app.Stage2AlgorithmDropDown)
                 settings.stage2_temperature_algorithm = app.Stage2AlgorithmDropDown.Value;
+            end
+            if stage2 && isfield(ctrl, 'hierarchical') && ~isempty(ctrl.hierarchical) && ...
+                    isvalid(ctrl.hierarchical)
+                use_hierarchy = logical(ctrl.hierarchical.Value);
+                settings.stage1_hierarchical_enabled = use_hierarchy;
+                settings.stage1_spatial_zlp_enabled = use_hierarchy;
+                settings.stage2_spatial_map_enabled = use_hierarchy;
+                settings.spatial_refit_enabled = false;
             end
             if stage2 && isfield(ctrl, 'forceRawStage2') && ~isempty(ctrl.forceRawStage2) && ...
                     isvalid(ctrl.forceRawStage2) && logical(ctrl.forceRawStage2.Value)
@@ -1821,7 +1836,7 @@
             else
                 smoothCheck.Layout.Row = 2; smoothCheck.Layout.Column = [5 8];
             end
-            sparseNote = uilabel(pg, 'Text', 'v2.0 Stage2：attention 硬 BE + 非 attention 软源强度；毛刺优先调对应平滑权重。', ...
+            sparseNote = uilabel(pg, 'Text', 'v2.1：attention 可信对约束温度，其余能区由软声子源强度重建；分层ZLP保护谱形。', ...
                 'FontColor', [0.55 0.16 0.02]);
             if app.IsCompact
                 sparseNote.Layout.Row = 4; sparseNote.Layout.Column = [1 6];
@@ -2333,6 +2348,10 @@
                 case 'R2', img = cr.R2_map; ttl = 'R2 map';
                 case 'NRMSE', img = cr.NRMSE_map; ttl = 'NRMSE map';
                 case 'T raw', img = cr.T_map_raw; ttl = 'T raw (K)';
+                case 'T data valid', img = app.optionalMap(cr, 'T_map_data_valid', cr.R2_map); ttl = 'T data-valid (K)';
+                case 'T joint', img = app.optionalMap(cr, 'T_map_joint', cr.R2_map); ttl = 'ZLP-guided T, no T smoothing (K)';
+                case 'T joint uncertainty', img = app.optionalMap(cr, 'T_uncertainty_joint_map', cr.R2_map); ttl = 'ZLP-guided T uncertainty (K)';
+                case 'Spatial inferred', img = app.optionalMap(cr, 'T_spatial_inferred_mask', cr.R2_map); ttl = 'Spatial-inferred mask';
                 case 'T repaired', img = cr.T_map_repaired; ttl = 'T repaired (K)';
                 case 'T spatial refined', img = cr.T_map_spatial_refined; ttl = 'T spatial refined (K)';
                 case 'T uncertainty', img = cr.T_uncertainty_map; ttl = 'T uncertainty (K)';
@@ -2349,6 +2368,13 @@
                 case 'ZLP guard start', img = cr.zlp_guard_start_map; ttl = 'ZLP guard start (meV)';
                 case 'ZLP guard fraction', img = cr.zlp_guard_fraction_map; ttl = 'ZLP fraction in guard';
                 case 'ZLP core width', img = cr.zlp_core_width_map; ttl = 'ZLP core width (meV)';
+                case 'ZLP cluster', img = app.optionalMap(cr, 'cluster_label_map', cr.R2_map); ttl = 'ZLP cluster';
+                case 'Cluster membership', img = app.optionalMap(cr, 'cluster_membership_map', cr.R2_map); ttl = 'Cluster membership';
+                case 'Cluster outlier', img = app.optionalMap(cr, 'cluster_outlier_mask', cr.R2_map); ttl = 'Cluster outlier mask';
+                case 'Template deviation', img = app.optionalMap(cr, 'template_deviation_map', cr.R2_map); ttl = 'Template deviation';
+                case 'ZLP spatial loss', img = app.optionalMap(cr, 'zlp_spatial_loss_map', cr.R2_map); ttl = 'ZLP spatial loss';
+                case 'ZLP interface score', img = app.optionalMap(cr, 'zlp_interface_score_map', cr.R2_map); ttl = 'Sharp-interface ZLP score';
+                case 'ZLP sharp interface', img = app.optionalMap(cr, 'zlp_interface_mask', cr.R2_map); ttl = 'ZLP sharp-interface mask';
                 otherwise, img = cr.R2_map; ttl = 'R2 map';
             end
         end
@@ -3355,7 +3381,7 @@
             elseif contains(key, 'attention')
                 tip = '控制注意力选区；明显峰被漏掉时提高增益或降低阈值。';
             elseif contains(key, 'stage2_temperature_algorithm')
-                tip = 'v2.0 使用 grid_scan；只有 attention 成对证据参与硬 BE 温度约束。';
+                tip = 'v2.1 使用 grid_scan；Data-valid 温度不做空间平滑，仅对无效点做 ZLP 界面引导的单向推断。';
             elseif contains(key, 'stage2_T_grid') || contains(key, 'fine_step') || contains(key, 'coarse_step')
                 tip = '控制温度搜索精度和速度；步长越小越准但越慢。';
             elseif contains(key, 'shape_guard')

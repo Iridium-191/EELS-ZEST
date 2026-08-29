@@ -22,13 +22,20 @@
         RLSourceResult = []
         RLSourceCubeResult = []
         RLDeconvResultCube = []
+        RLDiagnosticCache = struct('keys', {{}}, 'values', {{}}, 'capacity', 3)
+        FitContext = struct()
+        LoadedResultFile = ''
         DataSelectedY = []
         DataSelectedX = []
         StackSpectra = []
-        DataCursorHandles = []
-        Stage1CursorHandles = []
-        Stage2CursorHandles = []
-        StackCursorHandles = []
+        DataCursorHandles = {}
+        Stage1CursorHandles = {}
+        Stage2CursorHandles = {}
+        StackCursorHandles = {}
+        OwnedFigures = {}
+        DataMapImage = []
+        DataMapColorbar = []
+        LastLogDrawTime = 0
 
         StopRequested = false
 
@@ -93,6 +100,25 @@
             app.populateAdvancedTable();
             app.logStatus('EELS-ZEST is ready. Load a .mat or .dm3 datacube to begin.');
         end
+
+        function delete(app)
+            if ~isempty(app.UIFigure) && isvalid(app.UIFigure)
+                app.closeApp();
+            end
+        end
+
+        function sendSignalToData(app, stage, options)
+            if nargin < 2 || isempty(stage), stage = 'stage2'; end
+            if nargin < 3, options = []; end
+            stage2 = strcmpi(char(string(stage)), 'stage2');
+            app.importFitSignalToData(stage2, options);
+        end
+
+        function multiplySTA(app, source, manual_temperature_K)
+            if nargin < 2 || isempty(source), source = 'stage2'; end
+            if nargin < 3, manual_temperature_K = NaN; end
+            app.applySTA(source, manual_temperature_K);
+        end
     end
 
     methods (Access = private)
@@ -100,7 +126,7 @@
             [fig_pos, resolved_mode] = app.responsiveFigurePosition(app.LayoutMode);
             app.LayoutMode = resolved_mode;
             app.IsCompact = strcmp(resolved_mode, 'compact');
-            app.UIFigure = uifigure('Name', 'EELS-ZEST | Zero-loss Estimation and Sparse Thermometry', ...
+            app.UIFigure = uifigure('Name', 'EELS-ZEST 2.1.0 | Zero-loss Estimation and Sparse Thermometry', ...
                 'Position', fig_pos, 'Color', [0.93 0.97 1.0], 'Visible', visible);
             app.UIFigure.CloseRequestFcn = @(~, ~)app.closeApp();
 
@@ -137,7 +163,7 @@
             else
                 uilabel(hg, 'Text', 'Z', 'FontSize', 28, 'FontWeight', 'bold', 'FontColor', [0.04 0.32 0.56]);
             end
-            title_label = uilabel(hg, 'Text', 'EELS-ZEST', 'FontSize', 30, 'FontWeight', 'bold', ...
+            title_label = uilabel(hg, 'Text', 'EELS-ZEST 2.1.0', 'FontSize', 30, 'FontWeight', 'bold', ...
                 'FontColor', [0.03 0.22 0.38]);
             title_label.Layout.Column = 2;
             subtitle = uilabel(hg, 'Text', 'Zero-loss Estimation and Sparse Thermometry', ...
@@ -174,10 +200,10 @@
         function buildDataTab(app)
             if app.IsCompact
                 gl = uigridlayout(app.DataTab, [4 4]);
-                gl.RowHeight = {204, '1x', '1x', 46};
+                gl.RowHeight = {242, '1x', '1x', 46};
             else
                 gl = uigridlayout(app.DataTab, [3 4]);
-                gl.RowHeight = {152, '1x', 50};
+                gl.RowHeight = {194, '1x', 50};
             end
             gl.ColumnWidth = {'1x', '1x', '1x', '1x'};
             gl.Padding = [12 10 12 10];
@@ -188,12 +214,12 @@
             panel.Layout.Column = [1 4];
             app.enableScrollable(panel);
             if app.IsCompact
-                pg = uigridlayout(panel, [5 6]);
-                pg.RowHeight = {30, 30, 30, 30, 28};
+                pg = uigridlayout(panel, [6 6]);
+                pg.RowHeight = {30, 30, 30, 30, 28, 30};
                 pg.ColumnWidth = {'1x', '1x', '1x', '1x', '1x', '1x'};
             else
-                pg = uigridlayout(panel, [3 12]);
-                pg.RowHeight = {32, 32, 30};
+                pg = uigridlayout(panel, [4 12]);
+                pg.RowHeight = {32, 32, 30, 32};
                 pg.ColumnWidth = {90, 90, 90, 90, 80, 80, 90, 90, 90, 90, '1x', '1x'};
             end
             pg.RowSpacing = 6;
@@ -227,6 +253,8 @@
                     'FontColor', [0.05 0.25 0.45]);
                 note.Layout.Row = 5; note.Layout.Column = [5 6];
                 app.DataRLStatusLabel = note;
+                app.techButton(pg, 'Multiply STA', @(~, ~)app.applySTA(), 6, [1 2]);
+                app.techButton(pg, 'Multi-peak fit', @(~, ~)app.openPeakFitTool(), 6, [3 4]);
             else
                 app.techButton(pg, 'Load data', @(~, ~)app.loadData(), 1, [1 2]);
                 app.techButton(pg, 'Load result', @(~, ~)app.loadResult(), 1, [3 4]);
@@ -253,6 +281,8 @@
                 note.FontColor = [0.05 0.25 0.45];
                 note.Layout.Row = 3; note.Layout.Column = [9 12];
                 app.DataRLStatusLabel = note;
+                app.techButton(pg, 'Multiply STA', @(~, ~)app.applySTA(), 4, [1 2]);
+                app.techButton(pg, 'Multi-peak fit', @(~, ~)app.openPeakFitTool(), 4, [3 4]);
             end
 
             app.DataMapAxes = uiaxes(gl);
@@ -345,7 +375,7 @@
                 app.techLabel(pg, 'Algorithm', 4, 1);
                 alg = uidropdown(pg, 'Items', {'grid_scan'}, 'Value', 'grid_scan');
                 alg.Layout.Row = 4; alg.Layout.Column = [2 4];
-                spatial = uicheckbox(pg, 'Text', 'Edge-aware spatial refit', 'Value', true, 'FontColor', [0.05 0.20 0.35]);
+                spatial = uicheckbox(pg, 'Text', 'Hierarchical spatial model', 'Value', true, 'FontColor', [0.05 0.20 0.35]);
                 spatial.Layout.Row = 4; spatial.Layout.Column = [5 7];
                 classPrune = uicheckbox(pg, 'Text', 'Class EM pruning', 'Value', true, 'FontColor', [0.05 0.20 0.35]);
                 classPrune.Layout.Row = 6; classPrune.Layout.Column = [9 10];
@@ -370,10 +400,10 @@
             app.techButton(pg, 'Export', @(~, ~)app.exportResult(stage2), 5, [11 12]);
 
             app.techButton(pg, 'Load result', @(~, ~)app.loadResult(), 6, [1 2]);
-            app.techButton(pg, 'Send signal to Data', @(~, ~)app.importFitSignalToData(), 6, [3 5]);
+            app.techButton(pg, 'Send signal to Data', @(~, ~)app.importFitSignalToData(stage2), 6, [3 5]);
             if stage2
                 app.techButton(pg, '2-sigma outlier refit', @(~, ~)app.refitReliabilityOutliers(), 6, [6 8]);
-                mapDD = uidropdown(pg, 'Items', app.mapItems(), 'Value', 'T spatial refined', ...
+                mapDD = uidropdown(pg, 'Items', app.mapItems(), 'Value', 'T data valid', ...
                     'ValueChangedFcn', @(~, ~)app.plotMap(true));
                 mapDD.Layout.Row = 4; mapDD.Layout.Column = [9 12];
             else
@@ -462,7 +492,7 @@
                 app.techLabel(pg, 'Algorithm', 5, 1);
                 alg = uidropdown(pg, 'Items', {'grid_scan'}, 'Value', 'grid_scan');
                 alg.Layout.Row = 5; alg.Layout.Column = [2 4];
-                spatial = uicheckbox(pg, 'Text', 'Edge-aware spatial refit', 'Value', true, 'FontColor', [0.05 0.20 0.35]);
+                spatial = uicheckbox(pg, 'Text', 'Hierarchical spatial model', 'Value', true, 'FontColor', [0.05 0.20 0.35]);
                 spatial.Layout.Row = 5; spatial.Layout.Column = [5 6];
                 classPrune = uicheckbox(pg, 'Text', 'Class EM prune', 'Value', true, 'FontColor', [0.05 0.20 0.35]);
                 classPrune.Layout.Row = 5; classPrune.Layout.Column = [7 8];
@@ -485,10 +515,10 @@
             app.techButton(pg, 'Export', @(~, ~)app.exportResult(stage2), 7, [6 8]);
 
             app.techButton(pg, 'Load result', @(~, ~)app.loadResult(), 8, [1 2]);
-            app.techButton(pg, 'Send signal to Data', @(~, ~)app.importFitSignalToData(), 8, [3 4]);
+            app.techButton(pg, 'Send signal to Data', @(~, ~)app.importFitSignalToData(stage2), 8, [3 4]);
             if stage2
                 app.techButton(pg, '2-sigma outlier refit', @(~, ~)app.refitReliabilityOutliers(), 8, [5 6]);
-                mapDD = uidropdown(pg, 'Items', app.mapItems(), 'Value', 'T spatial refined', ...
+                mapDD = uidropdown(pg, 'Items', app.mapItems(), 'Value', 'T data valid', ...
                     'ValueChangedFcn', @(~, ~)app.plotMap(true));
                 mapDD.Layout.Row = 8; mapDD.Layout.Column = [7 8];
             else
@@ -747,6 +777,11 @@
             app.RawCube = cube;
             app.Ene = ene(:);
             app.DataInfo = info;
+            app.FitContext = EELS_ZEST_DataOps.fit_context_from_info(info, size(cube, [1 2]));
+            app.LoadedResultFile = '';
+            if isfield(app.FitContext, 'result_file') && isfile(app.FitContext.result_file)
+                app.LoadedResultFile = app.FitContext.result_file;
+            end
             app.Stage1CubeResult = [];
             app.Stage2CubeResult = [];
             app.Stage1SingleResult = [];
@@ -756,6 +791,7 @@
             app.RLSourceResult = [];
             app.RLSourceCubeResult = [];
             app.RLDeconvResultCube = [];
+            app.RLDiagnosticCache = struct('keys', {{}}, 'values', {{}}, 'capacity', 3);
             app.DataSelectedY = [];
             app.DataSelectedX = [];
             app.updateRLDeconvControl();
@@ -768,7 +804,22 @@
         function loadResult(app)
             [file, path] = uigetfile({'*.mat', 'MAT result (*.mat)'}, 'Load EELS-ZEST result');
             if isequal(file, 0), return; end
-            S = load(fullfile(path, file));
+            app.LoadedResultFile = fullfile(path, file);
+            app.Stage1CubeResult = [];
+            app.Stage2CubeResult = [];
+            app.Stage1SingleResult = [];
+            app.Stage2SingleResult = [];
+            app.CurrentResult = [];
+            app.FitContext = struct();
+            app.RLDiagnosticCache = struct('keys', {{}}, 'values', {{}}, 'capacity', 3);
+            result_names = {'cuberes', 'stage1_cuberes', 'stage2_cuberes', 'result'};
+            listed = whos('-file', app.LoadedResultFile);
+            available = intersect(result_names, {listed.name}, 'stable');
+            if isempty(available)
+                app.logStatus('No supported EELS-ZEST result variable was found in the selected file.');
+                return;
+            end
+            S = load(app.LoadedResultFile, available{:});
             if isfield(S, 'cuberes') || isfield(S, 'stage1_cuberes') || isfield(S, 'stage2_cuberes')
                 [cuberes, forced_stage2] = app.extractLoadedCubeResult(S);
                 has_stage2 = app.cuberesHasStage2(cuberes);
@@ -855,9 +906,9 @@
             settings = app.makeSettings(stage2, run_mode);
             app.StopRequested = false;
             d = uiprogressdlg(app.UIFigure, 'Title', 'EELS-ZEST datacube run', 'Message', 'Starting...', ...
-                'Cancelable', 'off', 'Value', 0);
+                'Cancelable', 'on', 'Value', 0);
             settings.datacube_progress_callback = @(done, total, elapsed, eta, med, label)app.updateProgress(d, done, total, elapsed, eta, med, label);
-            settings.datacube_stop_callback = @()app.StopRequested;
+            settings.datacube_stop_callback = @()app.datacubeStopRequested(d);
             cleanup = onCleanup(@()app.closeProgressDialog(d));
             try
                 if stage2 && ~isempty(app.Stage1CubeResult) && app.isReusableStage1Cube(app.Stage1CubeResult)
@@ -877,6 +928,7 @@
             else
                 app.Stage1CubeResult = cuberes;
             end
+            app.LoadedResultFile = app.findSavedResultFile(settings.test_output_dir, stage2);
             if isfield(cuberes, 'results') && ~isempty(cuberes.results)
                 app.CurrentResult = app.firstValidResult(cuberes.results);
                 if ~isempty(app.CurrentResult)
@@ -1052,9 +1104,11 @@
             settings.datacube_sample_strategy = 'all';
             settings.datacube_sample_pixels = Inf;
             settings.test_output_dir = char(ctrl.output.Value);
-            settings.save_plots = true;
-            settings.save_diagnostic_plots = true;
-            settings.max_saved_spectrum_plots = 12;
+            % Full-cube GUI runs save numerical results first. Large diagnostic
+            % figures are exported on demand to avoid MATLABWindow renderer leaks.
+            settings.save_plots = false;
+            settings.save_diagnostic_plots = false;
+            settings.max_saved_spectrum_plots = 0;
             settings.force_hidden_figures = true;
             settings.close_parallel_pool_after_run = false;
             settings.datacube_progress_every = 1;
@@ -1068,8 +1122,6 @@
                 case "parallel"
                     settings.datacube_parallel_enabled = true;
                     settings.datacube_resume_checkpoint = false;
-                    settings.save_plots = true;
-                    settings.save_diagnostic_plots = true;
                     settings.close_parallel_pool_after_run = true;
                 otherwise
                     settings.datacube_parallel_enabled = false;
@@ -1077,8 +1129,10 @@
             end
             if stage2
                 settings.stage2_temperature_algorithm = char(ctrl.algorithm.Value);
-                settings.spatial_refit_enabled = logical(ctrl.spatial.Value);
-                settings.spatial_refit_iterations = 2;
+                settings.stage1_hierarchical_enabled = logical(ctrl.spatial.Value);
+                settings.stage1_spatial_zlp_enabled = logical(ctrl.spatial.Value);
+                settings.stage2_spatial_map_enabled = logical(ctrl.spatial.Value);
+                settings.spatial_refit_enabled = false;
                 if isfield(ctrl, 'classPrune') && ~isempty(ctrl.classPrune)
                     settings.stage2_attention_class_prune_enabled = logical(ctrl.classPrune.Value);
                 end
@@ -1099,9 +1153,23 @@
             mask = app.Ene >= win(1) & app.Ene <= win(2);
             if nnz(mask) < 1, mask = true(size(app.Ene)); end
             img = sum(app.RawCube(:, :, mask), 3, 'omitnan');
-            h = imagesc(app.DataMapAxes, img);
+            if ~isempty(app.DataMapImage) && isgraphics(app.DataMapImage)
+                app.DataMapImage.CData = img;
+                app.DataMapImage.XData = [1, size(img, 2)];
+                app.DataMapImage.YData = [1, size(img, 1)];
+                h = app.DataMapImage;
+            else
+                cla(app.DataMapAxes);
+                h = imagesc(app.DataMapAxes, img);
+                app.DataMapImage = h;
+            end
             axis(app.DataMapAxes, 'image');
-            colorbar(app.DataMapAxes);
+            app.DataMapAxes.XLimMode = 'auto';
+            app.DataMapAxes.YLimMode = 'auto';
+            app.DataMapAxes.CLimMode = 'auto';
+            if isempty(app.DataMapColorbar) || ~isgraphics(app.DataMapColorbar)
+                app.DataMapColorbar = colorbar(app.DataMapAxes);
+            end
             title(app.DataMapAxes, sprintf('Energy-filtered map [%.1f, %.1f] meV', win(1), win(2)));
             xlabel(app.DataMapAxes, 'x'); ylabel(app.DataMapAxes, 'y');
             h.HitTest = 'on';
@@ -1137,13 +1205,13 @@
         function markDataPixel(app, xx, yy)
             app.deleteGraphicsHandles('DataCursorHandles');
             hold(app.DataMapAxes, 'on');
-            app.DataCursorHandles = [ ...
+            app.DataCursorHandles = { ...
                 plot(app.DataMapAxes, xx, yy, 'wo', 'MarkerSize', 8, 'LineWidth', 1.5), ...
-                plot(app.DataMapAxes, xx, yy, '+', 'Color', [0.85 0.08 0.10], 'MarkerSize', 8, 'LineWidth', 1.3)];
+                plot(app.DataMapAxes, xx, yy, '+', 'Color', [0.85 0.08 0.10], 'MarkerSize', 8, 'LineWidth', 1.3)};
             for ii = 1:numel(app.DataCursorHandles)
                 try
-                    app.DataCursorHandles(ii).HitTest = 'off';
-                    app.DataCursorHandles(ii).PickableParts = 'none';
+                    app.DataCursorHandles{ii}.HitTest = 'off';
+                    app.DataCursorHandles{ii}.PickableParts = 'none';
                 catch
                 end
             end
@@ -1157,6 +1225,7 @@
             if nnz(mask) < 1, mask = true(size(app.Ene)); end
             prof = squeeze(sum(app.RawCube(:, :, mask), 1, 'omitnan'));
             fig = figure('Name', 'EELS-ZEST line profile', 'Color', 'w', 'Position', [160 140 980 620]);
+            app.registerOwnedFigure(fig);
             ax = axes(fig);
             imagesc(ax, 1:size(prof, 1), app.Ene(mask), prof.');
             set(ax, 'YDir', 'normal');
@@ -1173,26 +1242,39 @@
             app.requireData();
             spec = squeeze(sum(sum(app.RawCube, 1, 'omitnan'), 2, 'omitnan'));
             plot(app.DataSpectrumAxes, app.Ene, spec, 'Color', [0.02 0.22 0.40], 'LineWidth', 1.4);
+            app.DataSpectrumAxes.XLimMode = 'auto';
+            app.DataSpectrumAxes.YLimMode = 'auto';
             grid(app.DataSpectrumAxes, 'on');
             xlabel(app.DataSpectrumAxes, 'Energy loss (meV)'); ylabel(app.DataSpectrumAxes, 'Integrated intensity');
             title(app.DataSpectrumAxes, 'Full-cube integrated spectrum');
         end
 
         function openRLDeconvFromData(app)
+            use_data_context = app.hasDataRLKernelContext();
             cuberes = app.activeRLDeconvCubeResult();
-            if isempty(cuberes)
+            if ~use_data_context && isempty(cuberes) && app.hasRestorableRLSource()
+                app.restoreRLSourceFromContext();
+                cuberes = app.activeRLDeconvCubeResult();
+            end
+            if ~use_data_context && isempty(cuberes)
                 app.updateRLDeconvControl();
-                app.logStatus('RL Conv needs a Stage 1 or Stage 2 datacube result. Load or run a datacube result first.');
+                app.logStatus('RL Conv needs transferred fitted-ZLP kernels or a Stage 1/2 datacube result.');
                 return;
             end
             settings = EELS_PearsonSparse_FullFit.defaults(app.Settings);
             settings.force_hidden_figures = true;
-            map_size = app.cuberesMapSize(cuberes);
-            if isempty(map_size)
-                map_size = [1, numel(cuberes.results)];
+            if use_data_context
+                map_size = size(app.RawCube, [1 2]);
+                results = [];
+                nres = prod(map_size);
+            else
+                map_size = app.cuberesMapSize(cuberes);
+                if isempty(map_size)
+                    map_size = [1, numel(cuberes.results)];
+                end
+                results = cuberes.results;
+                nres = numel(results);
             end
-            results = cuberes.results;
-            nres = numel(results);
             d = uiprogressdlg(app.UIFigure, 'Title', 'RL Conv datacube', ...
                 'Message', sprintf('Running RL on %d fitted spectra...', nres), ...
                 'Indeterminate', 'off', 'Value', 0, 'Cancelable', 'on');
@@ -1200,7 +1282,6 @@
             try
                 ene_out = [];
                 decube = [];
-                rl_cells = cell(map_size);
                 status_map = zeros(map_size);
                 r2_map = NaN(map_size);
                 nrmse_map = NaN(map_size);
@@ -1212,8 +1293,13 @@
                         app.logStatus('RL Conv cancelled; Data cube was not replaced.');
                         return;
                     end
-                    res = app.resultAtIndex(results, ii);
-                    [yy, xx] = app.resultPixelPosition(cuberes, ii, res, map_size);
+                    if use_data_context
+                        [yy, xx] = ind2sub(map_size, ii);
+                        res = app.currentDataRLResult(yy, xx);
+                    else
+                        res = app.resultAtIndex(results, ii);
+                        [yy, xx] = app.resultPixelPosition(cuberes, ii, res, map_size);
+                    end
                     if isempty(res) || yy < 1 || xx < 1 || yy > map_size(1) || xx > map_size(2)
                         fail_count = fail_count + 1;
                         continue;
@@ -1244,7 +1330,6 @@
                         scale = res.norm_val;
                     end
                     decube(yy, xx, :) = max(sig(:), 0) .* scale; %#ok<AGROW>
-                    rl_cells{yy, xx} = rl;
                     status_map(yy, xx) = 1;
                     r2_map(yy, xx) = rl.R2_weighted;
                     nrmse_map(yy, xx) = rl.NRMSE_weighted;
@@ -1261,17 +1346,26 @@
                 end
                 app.RawCube = decube;
                 app.Ene = ene_out(:);
-                app.DataInfo = struct('source', 'EELS-ZEST RL deconvolved latent signal cube', ...
-                    'rl_conv_status_map', status_map, ...
-                    'rl_conv_R2_map', r2_map, ...
-                    'rl_conv_NRMSE_map', nrmse_map, ...
-                    'rl_conv_ok_count', ok_count, ...
-                    'rl_conv_fail_count', fail_count, ...
-                    'rl_conv_fail_reasons', {unique(fail_reasons)}, ...
-                    'rl_conv_note', 'Each available fitted pixel was replaced by RL latent_signal * norm_val.');
-                app.RLSourceCubeResult = cuberes;
-                app.RLSourceResult = app.firstRLDeconvResult(cuberes);
-                app.RLDeconvResultCube = rl_cells;
+                app.DataInfo.source = 'EELS-ZEST RL deconvolved latent signal cube';
+                app.DataInfo.rl_conv_status_map = status_map;
+                app.DataInfo.rl_conv_R2_map = r2_map;
+                app.DataInfo.rl_conv_NRMSE_map = nrmse_map;
+                app.DataInfo.rl_conv_ok_count = ok_count;
+                app.DataInfo.rl_conv_fail_count = fail_count;
+                app.DataInfo.rl_conv_fail_reasons = unique(fail_reasons);
+                app.DataInfo.rl_conv_note = ...
+                    'Each available fitted pixel was replaced by RL latent_signal * norm_val.';
+                app.DataInfo.rl_conv_input_source = 'current Data with transferred fitted-ZLP kernel';
+                app.DataInfo.rl_conv_applied = true;
+                app.DataInfo.eels_zest_fit_context = app.FitContext;
+                app.DataInfo = EELS_ZEST_DataOps.append_history(app.DataInfo, ...
+                    'rl_deconvolution', struct('ok_count', ok_count, 'fail_count', fail_count));
+                if ~use_data_context
+                    app.RLSourceCubeResult = cuberes;
+                    app.RLSourceResult = app.firstRLDeconvResult(cuberes);
+                end
+                app.RLDeconvResultCube = [];
+                app.RLDiagnosticCache = struct('keys', {{}}, 'values', {{}}, 'capacity', 3);
                 app.DataFile = '';
                 app.persistCurrentDataForSolver('rl_deconvolved');
                 app.clearFitCaches(true);
@@ -1296,7 +1390,16 @@
             end
             yy = app.DataSelectedY;
             xx = app.DataSelectedX;
-            [res, cached_rl] = app.rlSourceResultForPixel(yy, xx);
+            cached_rl = app.getRLDiagnosticCache(yy, xx);
+            if app.hasDataRLKernelContext()
+                res = app.currentDataRLResult(yy, xx);
+            else
+                [res, cached_rl] = app.rlSourceResultForPixel(yy, xx);
+            end
+            if isempty(res) && ~app.hasDataRLKernelContext()
+                app.restoreRLSourceFromContext();
+                [res, cached_rl] = app.rlSourceResultForPixel(yy, xx);
+            end
             if isempty(res)
                 app.logStatus(sprintf('No RL-capable fitted result is available for Data pixel (%d,%d).', yy, xx));
                 return;
@@ -1304,13 +1407,21 @@
             settings = EELS_PearsonSparse_FullFit.defaults(app.Settings);
             settings.force_hidden_figures = true;
             try
-                if ~isempty(cached_rl) && isstruct(cached_rl) && isfield(cached_rl, 'available') && cached_rl.available
+                if isempty(cached_rl) || ~isstruct(cached_rl) || ...
+                        ~isfield(cached_rl, 'available') || ~cached_rl.available
+                    cached_rl = EELS_PearsonSparse_FullFit.rl_deconvolve_background_subtracted(res, settings);
+                    if cached_rl.available
+                        app.putRLDiagnosticCache(yy, xx, cached_rl);
+                    end
+                end
+                if isstruct(cached_rl) && isfield(cached_rl, 'available') && cached_rl.available
                     app.plotRLDeconvOnDataAxes(cached_rl);
                 end
                 fig = EELS_PearsonSparse_FullFit.plot_rl_deconvolution_diagnostic( ...
                     res, sprintf('EELS-ZEST RL diagnostic pixel (%d,%d)', yy, xx), settings);
                 if ~isempty(fig) && isgraphics(fig)
                     fig.Visible = 'on';
+                    app.registerOwnedFigure(fig);
                 end
                 app.logStatus(sprintf('Opened RL diagnostic for pixel (%d,%d).', yy, xx));
             catch ME
@@ -1359,70 +1470,22 @@
             title(app.DataSpectrumAxes, sprintf('ROI integrated spectrum: x %d-%d, y %d-%d', x1, x2, y1, y2));
             roi_export = struct('cube', roi_cube, 'spectrum', roi_spectrum, 'ene', app.Ene, ...
                 'x_range', [x1 x2], 'y_range', [y1 y2], 'source_file', app.DataFile);
-            assignin('base', 'eels_zest_roi', roi_export);
-            app.logStatus('ROI exported to base workspace as eels_zest_roi.');
+            app.exportPayloadToFile(roi_export, 'Export ROI', 'eels_zest_roi', ...
+                {'MAT', 'CSV'}, 'eels_zest_roi');
         end
 
         function openStackSpectraTool(app)
             app.requireData();
-            app.plotEnergyMap();
-            answer = inputdlg({'Number of spectra to stack', 'Selection mode: cursor or roi'}, ...
-                'Stack spectra', [1 44], {'3', 'cursor'});
-            if isempty(answer), return; end
-            n_pick = max(1, round(str2double(answer{1})));
-            if ~isfinite(n_pick), n_pick = 3; end
-            mode = lower(strtrim(answer{2}));
-            if ~ismember(mode, {'cursor', 'roi'}), mode = 'cursor'; end
-            app.deleteGraphicsHandles('StackCursorHandles');
-            app.logStatus('Stack spectra: double-click to confirm each selection. Ctrl+Q cancels, Ctrl+H confirms and plots.');
-            stack = struct('name', {{}}, 'spectrum', {{}}, 'selection', {{}}, ...
-                'mode', mode, 'ene', app.Ene(:), 'source_file', app.DataFile);
-            hold(app.DataMapAxes, 'on');
-            for kk = 1:n_pick
-                try
-                    if strcmp(mode, 'roi')
-                        roi = drawrectangle(app.DataMapAxes, 'Color', [0.00 0.55 1.00], 'LineWidth', 1.4);
-                        [pos, cancelled] = app.waitForROIWithHotkeys(roi, ...
-                            sprintf('Stack %d/%d: double-click to confirm. Ctrl+Q cancels, Ctrl+H confirms and plots.', kk, n_pick));
-                        if cancelled || isempty(pos), break; end
-                        [spec, selection] = app.spectrumFromROIPosition(pos);
-                        hmark = rectangle(app.DataMapAxes, 'Position', selection.position, ...
-                            'EdgeColor', [0.00 0.48 0.95], 'LineWidth', 1.2, 'LineStyle', '--');
-                        app.appendGraphicsHandle('StackCursorHandles', hmark);
-                    else
-                        roi = drawpoint(app.DataMapAxes, 'Color', [0.55 0.00 0.95], 'LineWidth', 1.6);
-                        [pos, cancelled] = app.waitForROIWithHotkeys(roi, ...
-                            sprintf('Stack %d/%d: double-click to confirm. Ctrl+Q cancels, Ctrl+H confirms and plots.', kk, n_pick));
-                        if cancelled || isempty(pos), break; end
-                        [spec, selection] = app.spectrumFromPointPosition(pos);
-                        hmark = plot(app.DataMapAxes, selection.x, selection.y, 'o', ...
-                            'Color', [0.50 0.00 0.95], 'MarkerFaceColor', [0.90 0.75 1.00], ...
-                            'MarkerSize', 7, 'LineWidth', 1.2);
-                        app.appendGraphicsHandle('StackCursorHandles', hmark);
-                    end
-                catch ME
-                    hold(app.DataMapAxes, 'off');
-                    app.logStatus(['Stack selection stopped: ', ME.message]);
-                    break;
-                end
-                default_name = sprintf('%s_%02d', mode, kk);
-                name_answer = inputdlg({'Spectrum name'}, 'Name selected spectrum', [1 44], {default_name});
-                if isempty(name_answer)
-                    label = default_name;
-                else
-                    label = strtrim(name_answer{1});
-                    if isempty(label), label = default_name; end
-                end
-                stack.name{end + 1} = label;
-                stack.spectrum{end + 1} = spec(:);
-                stack.selection{end + 1} = selection;
-            end
-            hold(app.DataMapAxes, 'off');
-            if isempty(stack.spectrum), return; end
+            win = sort([app.DataEnergyMinEdit.Value, app.DataEnergyMaxEdit.Value]);
+            fig = EELS_ZEST_StackTool(app.RawCube, app.Ene, app.DataInfo, win, ...
+                @(stack)app.receiveStackSpectra(stack));
+            app.registerOwnedFigure(fig);
+            app.logStatus('Opened the nonblocking Stack Spectra selection window.');
+        end
+
+        function receiveStackSpectra(app, stack)
             app.StackSpectra = stack;
-            app.plotStackedSpectra(stack, 'EELS-ZEST stacked spectra');
-            assignin('base', 'eels_zest_stacked_spectra', stack);
-            app.logStatus('Stacked spectra exported to base workspace as eels_zest_stacked_spectra.');
+            app.logStatus(sprintf('Stack Spectra retained %d selection(s).', numel(stack.spectrum)));
         end
 
         function [spec, selection] = spectrumFromPointPosition(app, pos)
@@ -1449,6 +1512,7 @@
 
         function plotStackedSpectra(app, stack, fig_name)
             fig = figure('Name', fig_name, 'Color', 'w', 'Position', [120 120 980 640]);
+            app.registerOwnedFigure(fig);
             ax = axes(fig); hold(ax, 'on');
             for kk = 1:numel(stack.spectrum)
                 y = app.normalizeStackSpectrum(stack.spectrum{kk});
@@ -1475,7 +1539,7 @@
             if isfield(ctrl, 'map') && ~isempty(ctrl.map) && isvalid(ctrl.map)
                 map_name = ctrl.map.Value;
             elseif stage2
-                map_name = 'T spatial refined';
+                map_name = 'T data valid';
             else
                 map_name = 'R2';
             end
@@ -1495,8 +1559,11 @@
         end
 
         function items = mapItems(~)
-            items = {'R2', 'NRMSE', 'T raw', 'T repaired', 'T spatial refined', ...
-                'T uncertainty', 'Reliability', 'Attention fraction', 'Warning', ...
+            items = {'R2', 'NRMSE', 'T raw', 'T data valid', 'T joint', 'T joint uncertainty', ...
+                'Spatial inferred', 'T repaired', 'T spatial refined', 'T uncertainty', ...
+                'ZLP cluster', 'Cluster membership', 'Cluster outlier', 'Template deviation', ...
+                'ZLP spatial loss', 'ZLP interface score', 'ZLP sharp interface', ...
+                'Reliability', 'Attention fraction', 'Warning', ...
                 'Bad pixel', 'Interface', 'Neighbor loss', 'Spectrum neighbor loss', ...
                 'Temperature neighbor z', 'Attention peak delta', 'Signal peak delta', ...
                 'ZLP guard start', 'ZLP guard fraction', 'ZLP core width'};
@@ -1510,6 +1577,10 @@
                 case 'R2', field = 'R2_map'; ttl = 'R2 map';
                 case 'NRMSE', field = 'NRMSE_map'; ttl = 'NRMSE map';
                 case 'T raw', field = 'T_map_raw'; ttl = 'T raw (K)';
+                case 'T data valid', field = 'T_map_data_valid'; ttl = 'Spectrum-constrained T (K)';
+                case 'T joint', field = 'T_map_joint'; ttl = 'ZLP-guided T, no temperature smoothing (K)';
+                case 'T joint uncertainty', field = 'T_uncertainty_joint_map'; ttl = 'ZLP-guided T uncertainty (K)';
+                case 'Spatial inferred', field = 'T_spatial_inferred_mask'; ttl = 'Spatially inferred temperature mask';
                 case 'T repaired', field = 'T_map_repaired'; ttl = 'T repaired (K)';
                 case 'T spatial refined', field = 'T_map_spatial_refined'; ttl = 'T spatial refined (K)';
                 case 'T uncertainty', field = 'T_uncertainty_map'; ttl = 'T uncertainty (K)';
@@ -1526,6 +1597,13 @@
                 case 'ZLP guard start', field = 'zlp_guard_start_map'; ttl = 'ZLP guard start (meV)';
                 case 'ZLP guard fraction', field = 'zlp_guard_fraction_map'; ttl = 'ZLP fraction in guard';
                 case 'ZLP core width', field = 'zlp_core_width_map'; ttl = 'ZLP core width (meV)';
+                case 'ZLP cluster', field = 'cluster_label_map'; ttl = 'Hierarchical ZLP cluster';
+                case 'Cluster membership', field = 'cluster_membership_map'; ttl = 'ZLP cluster membership';
+                case 'Cluster outlier', field = 'cluster_outlier_mask'; ttl = 'ZLP cluster outlier';
+                case 'Template deviation', field = 'template_deviation_map'; ttl = 'ZLP template deviation';
+                case 'ZLP spatial loss', field = 'zlp_spatial_loss_map'; ttl = 'ZLP spatial loss';
+                case 'ZLP interface score', field = 'zlp_interface_score_map'; ttl = 'Sharp-interface ZLP score';
+                case 'ZLP sharp interface', field = 'zlp_interface_mask'; ttl = 'ZLP sharp-interface mask';
                 otherwise, field = 'R2_map'; ttl = 'R2 map';
             end
             if isfield(cuberes, field)
@@ -1878,11 +1956,12 @@
             end
             imagesc(app.PMAxesExtra, maps(:, :, 1)); axis(app.PMAxesExtra, 'image'); colorbar(app.PMAxesExtra);
             title(app.PMAxesExtra, 'Source-intensity NMF component 1 map');
-            figure('Name', 'EELS-ZEST source-intensity NMF spectra');
+            fig = figure('Name', 'EELS-ZEST source-intensity NMF spectra');
+            app.registerOwnedFigure(fig);
             plot(pmres.axis_meV, H', 'LineWidth', 1.2); grid on;
             xlabel('Signed mode energy (meV)'); ylabel('Component source intensity'); title('Source-intensity NMF component spectra');
-            assignin('base', 'eels_zest_pm_nmf', struct('W', W, 'H', H, 'maps', maps, 'axis_meV', pmres.axis_meV));
-            app.logStatus('Source-intensity NMF result exported to the base workspace.');
+            app.LastPMResult.nmf = struct('W', W, 'H', H, 'maps', maps, 'axis_meV', pmres.axis_meV);
+            app.logStatus('Source-intensity NMF result is retained with the current intensity cube for file export.');
         end
 
         function runPMCluster(app)
@@ -1902,14 +1981,14 @@
             map(keep) = labels;
             imagesc(app.PMAxesExtra, map); axis(app.PMAxesExtra, 'image'); colorbar(app.PMAxesExtra);
             title(app.PMAxesExtra, sprintf('Source-intensity clusters, k = %d', k));
-            assignin('base', 'eels_zest_pm_cluster', struct('labels_map', map, 'axis_meV', pmres.axis_meV));
-            app.logStatus('Source-intensity clustering result exported to the base workspace.');
+            app.LastPMResult.cluster = struct('labels_map', map, 'axis_meV', pmres.axis_meV, 'cluster_count', k);
+            app.logStatus('Source-intensity clustering result is retained with the current intensity cube for file export.');
         end
 
         function exportPMCube(app)
             pmres = app.requirePM();
-            assignin('base', 'eels_zest_pm_cube', pmres);
-            app.logStatus('Source-intensity cube exported to the base workspace.');
+            app.exportPayloadToFile(pmres, 'Export sparse phonon intensity cube', ...
+                'eels_zest_sparse_phonon_intensity_cube', {'MAT', 'CSV'}, 'eels_zest_pm_cube');
         end
 
         function exportSelectedPM(app)
@@ -1918,8 +1997,8 @@
             mask = pmres.axis_meV >= win(1) & pmres.axis_meV <= win(2);
             selected = struct('axis_meV', pmres.axis_meV(mask), 'pm_cube', pmres.pm_cube(:, :, mask), ...
                 'mean_PM', pmres.mean_PM(mask), 'window_meV', win, 'source', pmres.source);
-            assignin('base', 'eels_zest_selected_pm', selected);
-            app.logStatus('Selected source-intensity window exported to the base workspace.');
+            app.exportPayloadToFile(selected, 'Export selected sparse phonon intensity window', ...
+                'eels_zest_sparse_phonon_window', {'MAT', 'CSV'}, 'eels_zest_selected_pm');
         end
 
         function populateAdvancedTable(app)
@@ -1968,10 +2047,84 @@
 
         function exportData(app)
             app.requireData();
-            assignin('base', 'eels_zest_cube', app.RawCube);
-            assignin('base', 'eels_zest_energy_meV', app.Ene);
-            assignin('base', 'eels_zest_data_info', app.DataInfo);
-            app.logStatus('Data exported to base workspace: eels_zest_cube / eels_zest_energy_meV / eels_zest_data_info.');
+            [file, path] = uiputfile('*.mat', 'Save current Data as EELS class', 'eels_zest_data.mat');
+            if isequal(file, 0), return; end
+            filename = fullfile(path, file);
+            EELS_ZEST_DataOps.save_eels(filename, app.RawCube, app.Ene, app.DataInfo);
+            app.logStatus(sprintf('Current Data saved as EELS class: %s', filename));
+        end
+
+        function applySTA(app, source_override, manual_temperature_K)
+            app.requireData();
+            app.captureFitContext();
+            if nargin < 2 || isempty(source_override)
+                choices = {'Manual temperature', 'Stage 1 soft T', 'Stage 2 fitted T (fallback to Stage 1)'};
+                [idx, ok] = listdlg('PromptString', 'STA temperature source', 'SelectionMode', 'single', ...
+                    'ListString', choices, 'InitialValue', 3, 'ListSize', [360 110]);
+                if ~ok, return; end
+            else
+                source_override = lower(char(string(source_override)));
+                if strcmp(source_override, 'manual')
+                    idx = 1;
+                elseif any(strcmp(source_override, {'stage1', 'stage1_soft'}))
+                    idx = 2;
+                elseif any(strcmp(source_override, {'stage2', 'stage2_fit'}))
+                    idx = 3;
+                else
+                    error('EELS:InvalidTemperatureSource', ...
+                        'STA source must be manual, stage1, or stage2.');
+                end
+            end
+            if nargin < 3, manual_temperature_K = NaN; end
+            [ny, nx, ~] = size(app.RawCube);
+            switch idx
+                case 1
+                    T = manual_temperature_K;
+                    if ~isfinite(T)
+                        answer = inputdlg({'Temperature (K)'}, 'Multiply STA', [1 36], {'300'});
+                        if isempty(answer), return; end
+                        T = str2double(answer{1});
+                    end
+                    if ~isfinite(T) || T <= 0, error('EELS:InvalidTemperature', 'Enter a positive temperature.'); end
+                    [temperature_map, fallback_mask] = EELS_ZEST_DataOps.resolve_sta_temperature( ...
+                        'manual', [ny nx], T, [], []);
+                    source = 'manual';
+                case 2
+                    assert(isfield(app.FitContext, 'T_stage1_soft') && ...
+                        isequal(size(app.FitContext.T_stage1_soft), [ny nx]), ...
+                        'EELS:MissingStage1Temperature', 'No matching Stage 1 soft-temperature map is available.');
+                    [temperature_map, fallback_mask] = EELS_ZEST_DataOps.resolve_sta_temperature( ...
+                        'stage1', [ny nx], NaN, app.FitContext.T_stage1_soft, []);
+                    source = 'stage1_T_soft';
+                otherwise
+                    assert(isfield(app.FitContext, 'T_stage2_fit') && ...
+                        isequal(size(app.FitContext.T_stage2_fit), [ny nx]), ...
+                        'EELS:MissingStage2Temperature', 'No matching Stage 2 fitted-temperature map is available.');
+                    T1 = [];
+                    if isfield(app.FitContext, 'T_stage1_soft'), T1 = app.FitContext.T_stage1_soft; end
+                    [temperature_map, fallback_mask] = EELS_ZEST_DataOps.resolve_sta_temperature( ...
+                        'stage2_fallback_stage1', [ny nx], NaN, T1, app.FitContext.T_stage2_fit);
+                    source = 'stage2_T_fit_with_stage1_T_soft_fallback';
+            end
+            [cube_out, ene_out, sta_info] = EELS_ZEST_DataOps.apply_sta_cube(app.RawCube, app.Ene, temperature_map);
+            app.RawCube = cube_out; app.Ene = ene_out;
+            sta_info.temperature_source = source;
+            sta_info.stage1_fallback_mask = fallback_mask;
+            app.DataInfo.sta = sta_info;
+            app.DataInfo = EELS_ZEST_DataOps.append_history(app.DataInfo, 'multiply_STA_loss_only', ...
+                struct('temperature_source', source, 'fallback_count', nnz(fallback_mask)));
+            app.persistCurrentDataForSolver('sta_loss_only');
+            app.clearFitCaches(false);
+            app.updatePixelLimits(); app.plotEnergyMap(); app.plotIntegratedSpectrum();
+            app.logStatus(sprintf('STA applied to positive-loss Data using %s; valid pixels %d/%d.', ...
+                source, nnz(sta_info.valid_temperature_mask), numel(sta_info.valid_temperature_mask)));
+        end
+
+        function openPeakFitTool(app)
+            app.requireData();
+            fig = EELS_ZEST_PeakFitTool(app.RawCube, app.Ene, app.DataInfo);
+            app.registerOwnedFigure(fig);
+            app.logStatus('Opened Robust Multi-Peak Fit. Full-map fitting retains parameter maps, not a fitted cube.');
         end
 
         function applyE2LossOnly(app)
@@ -2136,74 +2289,123 @@
                 rk, smooth_pts, app.DataFile));
         end
 
-        function importFitSignalToData(app)
-            if isempty(app.CurrentResult) && isempty(app.Stage1CubeResult) && isempty(app.Stage2CubeResult)
+        function importFitSignalToData(app, stage2, options)
+            if nargin < 2, stage2 = true; end
+            if nargin < 3, options = []; end
+            stage = 'stage1'; if stage2, stage = 'stage2'; end
+            cuberes = app.cubeResult(stage2);
+            single_result = app.singleResult(stage2);
+            if isempty(single_result) && ~isempty(app.CurrentResult) && (~stage2 || app.resultHasStage2(app.CurrentResult))
+                single_result = app.CurrentResult;
+            end
+            if isempty(single_result) && isempty(cuberes)
                 app.logStatus('No fitted result is available to send back to the Data tab.');
                 return;
             end
             try
-                rl_source = app.activeRLDeconvResult();
-                rl_cube_source = app.activeRLDeconvCubeResult();
-                if ~isempty(app.Stage2CubeResult)
-                    cuberes = app.Stage2CubeResult;
-                elseif ~isempty(app.Stage1CubeResult)
-                    cuberes = app.Stage1CubeResult;
+                if ~isempty(cuberes), first = app.firstValidResult(cuberes.results); else, first = single_result; end
+                if isempty(first), error('EELS:NoValidResult', 'No valid fitted result is available.'); end
+                if isempty(options)
+                    options = EELS_ZEST_CutoffDialog(first, stage);
                 else
-                    cuberes = [];
+                    options = app.normalizeCutoffOptions(options, stage);
                 end
+                if options.cancelled, return; end
                 if ~isempty(cuberes) && isfield(cuberes, 'results')
-                    first = app.firstValidResult(cuberes.results);
-                    if isempty(first)
-                        app.logStatus('The datacube result does not contain a valid fitted spectrum.');
-                        return;
-                    end
                     ene = app.fieldOr(first, 'ene_corrected', app.fieldOr(first, 'ene_raw', app.Ene));
                     map_size = app.cuberesMapSize(cuberes);
-                    if isempty(map_size)
-                        map_size = [1, numel(cuberes.results)];
-                    end
+                    if isempty(map_size), map_size = [1, numel(cuberes.results)]; end
                     sigcube = NaN(map_size(1), map_size(2), numel(ene));
+                    kernelcube = NaN(map_size(1), map_size(2), numel(ene), 'single');
+                    cutoff_map = NaN(map_size); valid_map = false(map_size);
+                    retained_max_map = NaN(map_size); removed_count_map = NaN(map_size);
                     for ii = 1:numel(cuberes.results)
-                        res = cuberes.results{ii};
-                        if ~(isstruct(res) && ~isfield(res, 'error')), continue; end
-                        if isfield(res, 'pixel_y') && isfield(res, 'pixel_x')
-                            yy = res.pixel_y; xx = res.pixel_x;
-                        elseif isfield(cuberes, 'sample_pixels') && ii <= numel(cuberes.sample_pixels)
-                            [yy, xx] = ind2sub(map_size, cuberes.sample_pixels(ii));
-                        elseif numel(cuberes.results) == prod(map_size)
-                            [yy, xx] = ind2sub(map_size, ii);
-                        else
+                        res = app.resultAtIndex(cuberes.results, ii);
+                        [yy, xx] = app.resultPixelPosition(cuberes, ii, res, map_size);
+                        if isempty(res) || ~isfinite(yy) || ~isfinite(xx) || ...
+                                yy < 1 || xx < 1 || yy > map_size(1) || xx > map_size(2)
                             continue;
                         end
-                        sig = app.resultSignalSpectrum(res);
-                        if ~isempty(sig) && yy >= 1 && xx >= 1 && yy <= map_size(1) && xx <= map_size(2)
-                            sigcube(yy, xx, :) = sig(:);
-                        end
+                        cutoff = app.cutoffForResult(res, options);
+                        if ~isfinite(cutoff), continue; end
+                        [sig, detail] = EELS_ZEST_DataOps.reconstruct_sparse_signal(res, stage, cutoff);
+                        sigcube(yy, xx, :) = sig(:); cutoff_map(yy, xx) = cutoff; valid_map(yy, xx) = true;
+                        kernelcube(yy, xx, :) = single(detail.kernel_norm(:));
+                        retained_em = detail.EM_meV(detail.retained_mask);
+                        if ~isempty(retained_em), retained_max_map(yy, xx) = max(retained_em); end
+                        removed_count_map(yy, xx) = nnz(~detail.retained_mask);
                     end
+                    if ~any(valid_map(:))
+                        error('EELS:NoValidReconstruction', ...
+                            'No fitted pixel produced a valid cutoff/reconvolved spectrum.');
+                    end
+                    context = app.captureFitContext(map_size);
                     app.RawCube = sigcube;
                     app.Ene = ene(:);
-                    app.DataInfo = struct('source', 'EELS-ZEST fitted signal cube');
-                    label = 'fitted signal cube';
+                    label = [stage, ' cutoff/reconvolved phonon cube'];
                 else
-                    res = app.CurrentResult;
+                    res = single_result;
                     ene = app.fieldOr(res, 'ene_corrected', app.fieldOr(res, 'ene_raw', app.Ene));
-                    app.RawCube = reshape(app.resultSignalSpectrum(res), 1, 1, []);
+                    cutoff = app.cutoffForResult(res, options);
+                    if ~isfinite(cutoff), error('EELS:MissingAttentionCutoff', 'No valid attention cutoff is available.'); end
+                    [sig, detail] = EELS_ZEST_DataOps.reconstruct_sparse_signal(res, stage, cutoff);
+                    app.RawCube = reshape(sig, 1, 1, []);
                     app.Ene = ene(:);
-                    app.DataInfo = struct('source', 'EELS-ZEST fitted signal spectrum');
-                    label = 'fitted signal spectrum';
+                    cutoff_map = cutoff; valid_map = true;
+                    kernelcube = reshape(single(detail.kernel_norm), 1, 1, []);
+                    retained_em = detail.EM_meV(detail.retained_mask);
+                    retained_max_map = NaN;
+                    if ~isempty(retained_em), retained_max_map = max(retained_em); end
+                    removed_count_map = nnz(~detail.retained_mask);
+                    context = app.captureFitContext([1 1]);
+                    label = [stage, ' cutoff/reconvolved phonon spectrum'];
                 end
+                required_temperature = 'T_stage1_soft';
+                if stage2, required_temperature = 'T_stage2_fit'; end
+                if ~isfield(context, required_temperature) || ...
+                        ~isequal(size(context.(required_temperature)), size(app.RawCube, [1 2]))
+                    error('EELS:MissingTransferredTemperature', ...
+                        'The fitted-temperature context does not match the reconstructed Data map.');
+                end
+                app.DataInfo.source = ['EELS-ZEST ', label];
+                app.DataInfo.sparse_source_cutoff_mode = options.mode;
+                app.DataInfo.sparse_source_cutoff_map_meV = cutoff_map;
+                app.DataInfo.sparse_source_cutoff_valid_mask = valid_map;
+                app.DataInfo.sparse_source_retained_max_EM_map_meV = retained_max_map;
+                app.DataInfo.sparse_source_removed_count_map = removed_count_map;
+                app.DataInfo.sparse_source_cutoff_semantics = ...
+                    'Cutoff applies to sparse source centers before fitted-ZLP convolution; the output is not hard-clipped.';
+                app.DataInfo.sparse_source_stage = stage;
+                app.DataInfo.sparse_source_json = options.json_meta;
+                app.FitContext.source_stage = stage;
+                app.DataInfo.eels_zest_fit_context = app.FitContext;
+                app.DataInfo.sparse_source_output_composition = ...
+                    'cutoff/reconvolved sparse phonon source only';
+                app.DataInfo.sparse_source_background_subtracted = true;
+                app.DataInfo.sparse_source_additive_zlp_included = false;
+                app.DataInfo.fitted_zlp_kernel_cube = kernelcube;
+                app.DataInfo.fitted_zlp_kernel_energy_meV = app.Ene(:);
+                app.DataInfo.fitted_zlp_kernel_normalization = 'unit sum per pixel';
+                app.DataInfo = EELS_ZEST_DataOps.append_history(app.DataInfo, 'sparse_source_cutoff_reconvolution', ...
+                    struct('stage', stage, 'mode', options.mode, 'valid_count', nnz(valid_map)));
                 app.DataFile = '';
-                app.persistCurrentDataForSolver('fitted_signal');
-                app.RLSourceResult = rl_source;
-                app.RLSourceCubeResult = rl_cube_source;
-                app.clearFitCaches(true);
+                app.persistCurrentDataForSolver([stage, '_cutoff_reconvolved']);
+                app.clearFitCaches(false);
                 app.updatePixelLimits();
                 app.plotEnergyMap();
                 app.plotIntegratedSpectrum();
                 app.TabGroup.SelectedTab = app.DataTab;
-                app.logStatus(['Sent ', label, ' back to the Data tab as the active dataset.']);
+                app.logStatus(sprintf(['Sent %s to Data; valid pixels %d/%d; cutoff %.3g-%.3g meV; ', ...
+                    'max retained source center %.3g meV.'], label, nnz(valid_map), numel(valid_map), ...
+                    min(cutoff_map(valid_map)), max(cutoff_map(valid_map)), ...
+                    max(retained_max_map(valid_map), [], 'omitnan')));
             catch ME
-                app.logStatus(['Send signal to Data failed: ', ME.message]);
+                location = '';
+                if ~isempty(ME.stack)
+                    location = sprintf(' [%s:%d]', ME.stack(1).name, ME.stack(1).line);
+                end
+                app.logStatus(sprintf('Send signal to Data failed (%s): %s%s', ...
+                    ME.identifier, ME.message, location));
             end
         end
 
@@ -2256,22 +2458,35 @@
                 cuberes = app.Stage1CubeResult;
                 tag = 'stage1';
             end
-            names = {};
+            scopes = {};
+            payloads = {};
+            workspace_names = {};
             if ~isempty(single)
-                assignin('base', ['eels_zest_', tag, '_selected_result'], single);
-                assignin('base', ['eels_zest_', tag, '_em_pm'], app.makeEMPMExport(single));
-                names{end + 1} = ['eels_zest_', tag, '_selected_result'];
-                names{end + 1} = ['eels_zest_', tag, '_em_pm'];
+                scopes{end + 1} = 'Selected pixel'; %#ok<AGROW>
+                payloads{end + 1} = single; %#ok<AGROW>
+                workspace_names{end + 1} = ['eels_zest_', tag, '_selected_result']; %#ok<AGROW>
             end
             if ~isempty(cuberes)
-                assignin('base', ['eels_zest_', tag, '_cuberes'], cuberes);
-                names{end + 1} = ['eels_zest_', tag, '_cuberes'];
+                scopes{end + 1} = 'Complete datacube result'; %#ok<AGROW>
+                payloads{end + 1} = cuberes; %#ok<AGROW>
+                workspace_names{end + 1} = ['eels_zest_', tag, '_cuberes']; %#ok<AGROW>
             end
-            if isempty(names)
+            if isempty(scopes)
                 app.logStatus('No result is available to export.');
-            else
-                app.logStatus(['Exported to base workspace: ', strjoin(names, ' / ')]);
+                return;
             end
+            options = EELS_ZEST_ExportDialog(['Export ', tag], scopes, {'MAT', 'CSV'});
+            if options.cancelled, return; end
+            payload = payloads{options.scope_index};
+            if strcmpi(options.format, 'CSV')
+                if strcmp(scopes{options.scope_index}, 'Selected pixel')
+                    payload = app.empmTable(app.makeEMPMExport(payload));
+                else
+                    payload = app.cubeSummaryTable(payload);
+                end
+            end
+            app.writeChosenExport(payload, options, ['eels_zest_', tag, '_result'], ...
+                workspace_names{options.scope_index});
         end
 
         function exportCurrentResult(app)
@@ -2279,9 +2494,13 @@
                 app.logStatus('No selected result is available to export.');
                 return;
             end
-            assignin('base', 'eels_zest_current_result', app.CurrentResult);
-            assignin('base', 'eels_zest_current_em_pm', app.makeEMPMExport(app.CurrentResult));
-            app.logStatus('Exported selected result: eels_zest_current_result / eels_zest_current_em_pm.');
+            options = EELS_ZEST_ExportDialog('Export selected result', {'Selected pixel'}, {'MAT', 'CSV'});
+            if options.cancelled, return; end
+            payload = app.CurrentResult;
+            if strcmpi(options.format, 'CSV')
+                payload = app.empmTable(app.makeEMPMExport(payload));
+            end
+            app.writeChosenExport(payload, options, 'eels_zest_selected_result', 'eels_zest_current_result');
         end
 
         function empm = makeEMPMExport(app, res)
@@ -2440,6 +2659,20 @@
             end
         end
 
+        function tf = datacubeStopRequested(app, dlg)
+            tf = logical(app.StopRequested);
+            if ~tf && ~isempty(dlg) && isvalid(dlg)
+                try
+                    tf = logical(dlg.CancelRequested);
+                catch
+                    tf = false;
+                end
+            end
+            if tf
+                app.StopRequested = true;
+            end
+        end
+
         function markSelectedPixel(app, stage2, yy, xx)
             ax = app.mapAxes(stage2);
             if stage2
@@ -2448,13 +2681,13 @@
                 app.deleteGraphicsHandles('Stage1CursorHandles');
             end
             hold(ax, 'on');
-            handles = [ ...
+            handles = { ...
                 plot(ax, xx, yy, 'wo', 'MarkerSize', 9, 'LineWidth', 1.8), ...
-                plot(ax, xx, yy, '+', 'Color', [0.85 0.08 0.10], 'MarkerSize', 9, 'LineWidth', 1.4)];
+                plot(ax, xx, yy, '+', 'Color', [0.85 0.08 0.10], 'MarkerSize', 9, 'LineWidth', 1.4)};
             for ii = 1:numel(handles)
                 try
-                    handles(ii).HitTest = 'off';
-                    handles(ii).PickableParts = 'none';
+                    handles{ii}.HitTest = 'off';
+                    handles{ii}.PickableParts = 'none';
                 catch
                 end
             end
@@ -2504,7 +2737,19 @@
         end
 
         function closeApp(app)
-            delete(app.UIFigure);
+            app.deleteGraphicsHandles('DataCursorHandles');
+            app.deleteGraphicsHandles('Stage1CursorHandles');
+            app.deleteGraphicsHandles('Stage2CursorHandles');
+            app.deleteGraphicsHandles('StackCursorHandles');
+            for ii = 1:numel(app.OwnedFigures)
+                try
+                    if isgraphics(app.OwnedFigures{ii}), delete(app.OwnedFigures{ii}); end
+                catch
+                end
+            end
+            app.OwnedFigures = {};
+            app.RLDiagnosticCache = struct('keys', {{}}, 'values', {{}}, 'capacity', 3);
+            if ~isempty(app.UIFigure) && isvalid(app.UIFigure), delete(app.UIFigure); end
         end
 
         function clearFitCaches(app, preserve_rl_source)
@@ -2522,16 +2767,23 @@
                 app.RLSourceCubeResult = [];
                 app.RLDeconvResultCube = [];
             end
+            app.RLDiagnosticCache = struct('keys', {{}}, 'values', {{}}, 'capacity', 3);
             app.deleteGraphicsHandles('Stage1CursorHandles');
             app.deleteGraphicsHandles('Stage2CursorHandles');
             app.updateRLDeconvControl();
         end
 
         function updateRLDeconvControl(app)
-            can_run = ~isempty(app.activeRLDeconvCubeResult());
+            has_data_context = app.hasDataRLKernelContext();
+            can_run = has_data_context || ~isempty(app.activeRLDeconvCubeResult()) || ...
+                app.hasRestorableRLSource();
             can_diag = false;
             if ~isempty(app.DataSelectedY) && ~isempty(app.DataSelectedX)
-                can_diag = ~isempty(app.rlSourceResultForPixel(app.DataSelectedY, app.DataSelectedX));
+                if has_data_context
+                    can_diag = ~isempty(app.currentDataRLResult(app.DataSelectedY, app.DataSelectedX));
+                else
+                    can_diag = ~isempty(app.rlSourceResultForPixel(app.DataSelectedY, app.DataSelectedX));
+                end
             end
             if ~isempty(app.DataRLDeconvButton) && isvalid(app.DataRLDeconvButton)
                 if can_run
@@ -2640,12 +2892,14 @@
         function [yy, xx] = resultPixelPosition(~, cuberes, ii, res, map_size)
             yy = NaN;
             xx = NaN;
-            if isstruct(res) && isfield(res, 'pixel_y') && isfield(res, 'pixel_x') && ...
+            if isfield(cuberes, 'sample_pixels') && ii <= numel(cuberes.sample_pixels) && ...
+                    isfinite(cuberes.sample_pixels(ii)) && cuberes.sample_pixels(ii) >= 1 && ...
+                    cuberes.sample_pixels(ii) <= prod(map_size)
+                [yy, xx] = ind2sub(map_size, round(cuberes.sample_pixels(ii)));
+            elseif isstruct(res) && isfield(res, 'pixel_y') && isfield(res, 'pixel_x') && ...
                     isfinite(res.pixel_y) && isfinite(res.pixel_x)
                 yy = round(res.pixel_y);
                 xx = round(res.pixel_x);
-            elseif isfield(cuberes, 'sample_pixels') && ii <= numel(cuberes.sample_pixels)
-                [yy, xx] = ind2sub(map_size, cuberes.sample_pixels(ii));
             elseif isfield(cuberes, 'results') && numel(cuberes.results) == prod(map_size)
                 [yy, xx] = ind2sub(map_size, ii);
             end
@@ -2653,11 +2907,7 @@
 
         function [res, cached_rl] = rlSourceResultForPixel(app, yy, xx)
             res = [];
-            cached_rl = [];
-            if ~isempty(app.RLDeconvResultCube) && iscell(app.RLDeconvResultCube) && ...
-                    yy >= 1 && xx >= 1 && yy <= size(app.RLDeconvResultCube, 1) && xx <= size(app.RLDeconvResultCube, 2)
-                cached_rl = app.RLDeconvResultCube{yy, xx};
-            end
+            cached_rl = app.getRLDiagnosticCache(yy, xx);
             candidates = {app.Stage2CubeResult, app.Stage1CubeResult, app.RLSourceCubeResult};
             for cc = 1:numel(candidates)
                 cuberes = candidates{cc};
@@ -2678,10 +2928,13 @@
         end
 
         function tf = resultCanRunRLDeconv(~, res)
+            direct_input = isstruct(res) && isfield(res, 'rl_input_is_background_subtracted') && ...
+                isscalar(res.rl_input_is_background_subtracted) && ...
+                logical(res.rl_input_is_background_subtracted) && isfield(res, 'rl_kernel_norm');
             tf = isstruct(res) && isfield(res, 'ene_corrected') && ...
                 (isfield(res, 'raw_data_norm') || ...
                 (isfield(res, 'raw_data') && isfield(res, 'norm_val') && isfinite(res.norm_val) && res.norm_val > 0)) && ...
-                ((isfield(res, 'stage1') && isstruct(res.stage1) && isfield(res.stage1, 'params')) || ...
+                (direct_input || (isfield(res, 'stage1') && isstruct(res.stage1) && isfield(res.stage1, 'params')) || ...
                 isfield(res, 'zlp_params'));
         end
 
@@ -2805,6 +3058,79 @@
             else
                 val = fallback;
             end
+        end
+
+        function exportPayloadToFile(app, payload, title_text, base_name, formats, workspace_name)
+            options = EELS_ZEST_ExportDialog(title_text, {'Current content'}, formats);
+            if options.cancelled, return; end
+            if strcmpi(options.format, 'CSV') && isstruct(payload) && isfield(payload, 'pm_cube')
+                payload = app.pmLongTable(payload);
+            end
+            app.writeChosenExport(payload, options, base_name, workspace_name);
+        end
+
+        function writeChosenExport(app, payload, options, base_name, workspace_name)
+            format = lower(char(options.format));
+            switch format
+                case 'mat'
+                    filter = {'*.mat', 'MAT-file (*.mat)'}; ext = '.mat';
+                case 'csv'
+                    filter = {'*.csv', 'CSV file (*.csv)'}; ext = '.csv';
+                otherwise
+                    error('EELS:UnsupportedExportFormat', 'Unsupported export format: %s', format);
+            end
+            [file, path] = uiputfile(filter, 'Save export', [base_name, ext]);
+            if isequal(file, 0), return; end
+            filename = fullfile(path, file);
+            EELS_ZEST_Export.save_payload(filename, payload, format, workspace_name);
+            if options.assign_workspace
+                assignin('base', matlab.lang.makeValidName(workspace_name), payload);
+            end
+            app.logStatus(sprintf('Exported %s.', filename));
+        end
+
+        function T = empmTable(~, empm)
+            T = table();
+            stages = {'stage1', 'stage2'};
+            for ii = 1:numel(stages)
+                name = stages{ii};
+                if ~isfield(empm, name), continue; end
+                data = empm.(name);
+                n = numel(data.EM_meV);
+                Ti = table(repmat(string(name), n, 1), double(data.EM_meV(:)), ...
+                    double(data.PM_stokes(:)), double(data.PM_antistokes(:)), ...
+                    'VariableNames', {'stage', 'energy_meV', 'loss_intensity', 'gain_intensity'});
+                T = [T; Ti]; %#ok<AGROW>
+            end
+        end
+
+        function T = cubeSummaryTable(app, cuberes)
+            map_size = app.cuberesMapSize(cuberes);
+            if isempty(map_size)
+                error('EELS:MissingMapSize', 'The datacube result has no map dimensions.');
+            end
+            [yy, xx] = ndgrid(1:map_size(1), 1:map_size(2));
+            T = table(yy(:), xx(:), 'VariableNames', {'pixel_y', 'pixel_x'});
+            names = {'R2_map', 'NRMSE_map', 'T_map_raw', 'T_map_data_valid', ...
+                'T_map_joint', 'T_uncertainty_joint_map', 'reliability_map', 'fit_status_map'};
+            for ii = 1:numel(names)
+                name = names{ii};
+                if ~isfield(cuberes, name), continue; end
+                value = cuberes.(name);
+                if (isnumeric(value) || islogical(value)) && isequal(size(value), map_size)
+                    T.(matlab.lang.makeValidName(name)) = value(:);
+                end
+            end
+        end
+
+        function T = pmLongTable(~, pmres)
+            cube = double(pmres.pm_cube);
+            axis_meV = double(pmres.axis_meV(:));
+            assert(size(cube, 3) == numel(axis_meV), 'EELS:PMShapeMismatch', ...
+                'Sparse phonon intensity cube does not match its energy axis.');
+            [yy, xx, ee] = ndgrid(1:size(cube, 1), 1:size(cube, 2), 1:size(cube, 3));
+            T = table(yy(:), xx(:), axis_meV(ee(:)), cube(:), ...
+                'VariableNames', {'pixel_y', 'pixel_x', 'signed_energy_meV', 'source_intensity'});
         end
 
         function out = defaultOutputDir(app, stage2)
@@ -2980,7 +3306,9 @@
             elseif contains(key, 'attention')
                 tip = 'Controls feature-window selection. Lower thresholds or raise gain when obvious peaks are missed.';
             elseif contains(key, 'temperature_algorithm')
-                tip = 'v2.0 grid_scan uses hard BE only for paired attention evidence; other mode energies retain soft source intensities.';
+                tip = 'v2.1 keeps attention hard-BE temperature evidence; ZLP-guided inference never smooths data-valid temperatures.';
+            elseif contains(key, 'hierarchical') || contains(key, 'spatial_zlp')
+                tip = 'Hierarchical Stage 1 shares ZLP shape within spectral clusters while preserving per-pixel amplitudes and phonon source intensities.';
             elseif contains(key, 'spatial_refit')
                 tip = 'Use for isolated bad pixels. Keep edge-aware behavior on for interfaces.';
             elseif contains(key, 'reliability') || contains(key, 'uncertainty')
@@ -3159,21 +3487,273 @@
             if isempty(handles), return; end
             for ii = 1:numel(handles)
                 try
-                    if isgraphics(handles(ii))
-                        delete(handles(ii));
+                    if iscell(handles), h = handles{ii}; else, h = handles(ii); end
+                    if isgraphics(h)
+                        delete(h);
                     end
                 catch
                 end
             end
-            app.(prop_name) = [];
+            app.(prop_name) = {};
+        end
+
+        function context = captureFitContext(app, requested_map_size)
+            context = struct();
+            if nargin >= 2 && ~isempty(requested_map_size)
+                map_size = double(requested_map_size(:).');
+            else
+                stage_cube = app.Stage2CubeResult;
+                if isempty(stage_cube), stage_cube = app.Stage1CubeResult; end
+                map_size = app.cuberesMapSize(stage_cube);
+                if isempty(map_size)
+                    if isempty(app.RawCube), return; end
+                    map_size = size(app.RawCube, [1 2]);
+                end
+            end
+            if numel(map_size) ~= 2 || any(~isfinite(map_size)) || any(map_size < 1)
+                context = struct();
+                return;
+            end
+            map_size = round(map_size);
+            context.map_size = map_size;
+            context.result_file = app.LoadedResultFile;
+            stage1_cube = app.Stage1CubeResult;
+            stage2_cube = app.Stage2CubeResult;
+            if isempty(stage1_cube) && isstruct(stage2_cube)
+                stage1_cube = stage2_cube;
+            end
+            if ~isempty(stage1_cube) || ~isempty(stage2_cube)
+                try
+                    [T1, T2, valid2] = EELS_ZEST_DataOps.temperature_maps( ...
+                        stage1_cube, stage2_cube, map_size);
+                    context.T_stage1_soft = T1;
+                    context.T_stage2_fit = T2;
+                    context.stage2_valid_mask = valid2;
+                catch
+                end
+            else
+                s1 = app.Stage1SingleResult;
+                s2 = app.Stage2SingleResult;
+                if isempty(s1) && isstruct(app.CurrentResult), s1 = app.CurrentResult; end
+                if isempty(s2) && app.resultHasStage2(app.CurrentResult), s2 = app.CurrentResult; end
+                T1 = NaN(map_size); T2 = NaN(map_size);
+                if prod(map_size) == 1
+                    if isstruct(s1) && isfield(s1, 'T_soft') && isfinite(s1.T_soft)
+                        T1(1) = s1.T_soft;
+                    end
+                    if isstruct(s2) && isfield(s2, 'stage2') && isstruct(s2.stage2) && ...
+                            isfield(s2.stage2, 'T_fit') && isfinite(s2.stage2.T_fit)
+                        T2(1) = s2.stage2.T_fit;
+                    elseif isstruct(s2) && isfield(s2, 'T_fit') && isfinite(s2.T_fit)
+                        T2(1) = s2.T_fit;
+                    end
+                    context.T_stage1_soft = T1;
+                    context.T_stage2_fit = T2;
+                    context.stage2_valid_mask = isfinite(T2) & T2 > 0;
+                end
+            end
+            if isfield(context, 'T_stage1_soft') || isfield(context, 'T_stage2_fit')
+                app.FitContext = context;
+            end
+        end
+
+        function tf = hasRestorableRLSource(app)
+            tf = false;
+            if isstruct(app.DataInfo) && isfield(app.DataInfo, 'rl_conv_applied') && ...
+                    app.DataInfo.rl_conv_applied
+                return;
+            end
+            if isfield(app.FitContext, 'map_size') && prod(app.FitContext.map_size) <= 1
+                return;
+            end
+            filename = app.LoadedResultFile;
+            if isempty(filename) && isfield(app.FitContext, 'result_file')
+                filename = app.FitContext.result_file;
+            end
+            if ischar(filename) || isstring(filename)
+                tf = isfile(char(filename));
+            end
+        end
+
+        function tf = hasDataRLKernelContext(app)
+            tf = false;
+            if isempty(app.RawCube) || isempty(app.Ene) || ~isstruct(app.DataInfo) || ...
+                    ~isfield(app.DataInfo, 'fitted_zlp_kernel_cube')
+                return;
+            end
+            if isfield(app.DataInfo, 'rl_conv_applied') && app.DataInfo.rl_conv_applied
+                return;
+            end
+            kernels = app.DataInfo.fitted_zlp_kernel_cube;
+            if ~isequal(size(kernels), size(app.RawCube))
+                return;
+            end
+            if isfield(app.DataInfo, 'fitted_zlp_kernel_energy_meV')
+                kernel_energy = double(app.DataInfo.fitted_zlp_kernel_energy_meV(:));
+                if numel(kernel_energy) ~= numel(app.Ene) || ...
+                        any(abs(kernel_energy - app.Ene(:)) > 1e-9)
+                    return;
+                end
+            end
+            tf = any(isfinite(kernels(:)) & kernels(:) > 0);
+        end
+
+        function res = currentDataRLResult(app, yy, xx)
+            res = [];
+            if ~app.hasDataRLKernelContext() || yy < 1 || xx < 1 || ...
+                    yy > size(app.RawCube, 1) || xx > size(app.RawCube, 2)
+                return;
+            end
+            signal = double(squeeze(app.RawCube(yy, xx, :)));
+            kernel = double(squeeze(app.DataInfo.fitted_zlp_kernel_cube(yy, xx, :)));
+            if numel(signal) ~= numel(app.Ene) || numel(kernel) ~= numel(app.Ene) || ...
+                    ~any(isfinite(signal)) || ~any(isfinite(kernel) & kernel > 0)
+                return;
+            end
+            kernel(~isfinite(kernel) | kernel < 0) = 0;
+            kernel = kernel ./ max(sum(kernel, 'omitnan'), eps);
+            norm_val = sum(abs(signal), 'omitnan');
+            if ~isfinite(norm_val) || norm_val <= eps
+                norm_val = max(abs(signal), [], 'omitnan');
+            end
+            if ~isfinite(norm_val) || norm_val <= eps
+                return;
+            end
+            res = struct('ene_corrected', app.Ene(:), 'ene_raw', app.Ene(:), ...
+                'raw_data', signal(:), 'raw_data_norm', signal(:) ./ norm_val, ...
+                'norm_val', norm_val, 'rl_input_is_background_subtracted', true, ...
+                'rl_kernel_norm', kernel(:));
+        end
+
+        function restored = restoreRLSourceFromContext(app)
+            restored = false;
+            if isstruct(app.DataInfo) && isfield(app.DataInfo, 'rl_conv_applied') && ...
+                    app.DataInfo.rl_conv_applied
+                return;
+            end
+            if ~isempty(app.activeRLDeconvCubeResult()) || app.resultCanRunRLDeconv(app.RLSourceResult)
+                restored = true;
+                return;
+            end
+            filename = app.LoadedResultFile;
+            if isempty(filename) && isfield(app.FitContext, 'result_file')
+                filename = app.FitContext.result_file;
+            end
+            if ~(ischar(filename) || isstring(filename)) || ~isfile(char(filename))
+                return;
+            end
+            filename = char(filename);
+            try
+                listed = whos('-file', filename);
+                names = {listed.name};
+                candidates = intersect({'cuberes', 'stage2_cuberes', 'stage1_cuberes', 'result'}, ...
+                    names, 'stable');
+                if isempty(candidates), return; end
+                S = load(filename, candidates{:});
+                if isfield(S, 'cuberes') || isfield(S, 'stage2_cuberes') || isfield(S, 'stage1_cuberes')
+                    [cuberes, ~] = app.extractLoadedCubeResult(S);
+                    if ~isempty(app.firstRLDeconvResult(cuberes))
+                        app.RLSourceCubeResult = cuberes;
+                        app.RLSourceResult = app.firstRLDeconvResult(cuberes);
+                        restored = true;
+                    end
+                elseif isfield(S, 'result') && app.resultCanRunRLDeconv(S.result)
+                    app.RLSourceResult = S.result;
+                    restored = true;
+                end
+                if restored
+                    app.LoadedResultFile = filename;
+                    app.logStatus('Restored the fitted-result context required by RL deconvolution.');
+                end
+            catch ME
+                app.logStatus(['Could not restore the RL source result: ', ME.message]);
+            end
+        end
+
+        function cutoff = cutoffForResult(~, res, options)
+            cutoff = NaN;
+            if contains(lower(string(options.mode)), 'attention')
+                cutoff = EELS_ZEST_DataOps.attention_cutoff(res, options.tail_meV);
+            elseif isfield(options, 'cutoff_meV') && isfinite(options.cutoff_meV)
+                cutoff = options.cutoff_meV;
+            end
+        end
+
+        function options = normalizeCutoffOptions(~, options, stage)
+            assert(isstruct(options), 'EELS:InvalidCutoffOptions', ...
+                'Programmatic cutoff options must be a struct.');
+            if ~isfield(options, 'cancelled'), options.cancelled = false; end
+            if ~isfield(options, 'mode'), options.mode = 'Manual cutoff'; end
+            if ~isfield(options, 'cutoff_meV'), options.cutoff_meV = NaN; end
+            if ~isfield(options, 'tail_meV'), options.tail_meV = 20; end
+            if ~isfield(options, 'json_file'), options.json_file = ''; end
+            if ~isfield(options, 'json_meta'), options.json_meta = struct(); end
+            if contains(lower(string(options.mode)), 'attention')
+                assert(strcmpi(stage, 'stage2'), 'EELS:InvalidCutoffOptions', ...
+                    'Attention cutoff is available only for Stage 2.');
+            else
+                assert(isfinite(options.cutoff_meV) && options.cutoff_meV > 0, ...
+                    'EELS:InvalidCutoffOptions', 'Manual/JSON cutoff must be positive.');
+            end
+        end
+
+        function registerOwnedFigure(app, fig)
+            if isempty(fig) || ~isgraphics(fig), return; end
+            keep = false(size(app.OwnedFigures));
+            for ii = 1:numel(app.OwnedFigures)
+                keep(ii) = isgraphics(app.OwnedFigures{ii});
+            end
+            app.OwnedFigures = app.OwnedFigures(keep);
+            app.OwnedFigures{end + 1} = fig;
+        end
+
+        function filename = findSavedResultFile(~, output_dir, stage2)
+            filename = '';
+            if nargin < 3, stage2 = true; end
+            if isempty(output_dir) || ~isfolder(output_dir), return; end
+            patterns = {'stage2_reused_datacube_result.mat', '*datacube_result.mat'};
+            if ~stage2, patterns = {'stage1_datacube_result.mat', '*datacube_result.mat'}; end
+            files = [];
+            for ii = 1:numel(patterns)
+                files = [files; dir(fullfile(output_dir, patterns{ii}))]; %#ok<AGROW>
+            end
+            if isempty(files), return; end
+            [~, order] = sort([files.datenum], 'descend');
+            files = files(order);
+            filename = fullfile(files(1).folder, files(1).name);
+        end
+
+        function cached = getRLDiagnosticCache(app, yy, xx)
+            cached = [];
+            key = sprintf('%d_%d', yy, xx);
+            idx = find(strcmp(app.RLDiagnosticCache.keys, key), 1);
+            if isempty(idx), return; end
+            cached = app.RLDiagnosticCache.values{idx};
+            if idx > 1
+                app.RLDiagnosticCache.keys = [{key}, app.RLDiagnosticCache.keys([1:idx-1, idx+1:end])];
+                app.RLDiagnosticCache.values = [{cached}, app.RLDiagnosticCache.values([1:idx-1, idx+1:end])];
+            end
+        end
+
+        function putRLDiagnosticCache(app, yy, xx, value)
+            key = sprintf('%d_%d', yy, xx);
+            idx = find(strcmp(app.RLDiagnosticCache.keys, key), 1);
+            if ~isempty(idx)
+                app.RLDiagnosticCache.keys(idx) = [];
+                app.RLDiagnosticCache.values(idx) = [];
+            end
+            app.RLDiagnosticCache.keys = [{key}, app.RLDiagnosticCache.keys];
+            app.RLDiagnosticCache.values = [{value}, app.RLDiagnosticCache.values];
+            cap = max(1, app.RLDiagnosticCache.capacity);
+            app.RLDiagnosticCache.keys = app.RLDiagnosticCache.keys(1:min(cap, end));
+            app.RLDiagnosticCache.values = app.RLDiagnosticCache.values(1:min(cap, end));
         end
 
         function appendGraphicsHandle(app, prop_name, handle)
-            if isempty(app.(prop_name))
-                app.(prop_name) = handle;
-            else
-                app.(prop_name)(end + 1) = handle;
-            end
+            handles = app.(prop_name);
+            if ~iscell(handles), handles = num2cell(handles); end
+            handles{end + 1} = handle;
+            app.(prop_name) = handles;
         end
 
         function [pos, cancelled] = waitForROIWithHotkeys(app, roi, prompt)
@@ -3261,7 +3841,7 @@
                 end
                 try
                     if isvalid(roi)
-                        delete(roi);
+                        resume(roi);
                     end
                 catch
                 end
@@ -3271,9 +3851,11 @@
         function logStage(app, stage2, msg)
             app.logStatus(msg);
             if stage2 && ~isempty(app.Stage2StatusArea) && isvalid(app.Stage2StatusArea)
-                app.Stage2StatusArea.Value = [app.Stage2StatusArea.Value; {msg}];
+                values = [cellstr(app.Stage2StatusArea.Value); {msg}];
+                app.Stage2StatusArea.Value = values(max(1, end - 249):end);
             elseif ~stage2 && ~isempty(app.Stage1StatusArea) && isvalid(app.Stage1StatusArea)
-                app.Stage1StatusArea.Value = [app.Stage1StatusArea.Value; {msg}];
+                values = [cellstr(app.Stage1StatusArea.Value); {msg}];
+                app.Stage1StatusArea.Value = values(max(1, end - 249):end);
             end
         end
 
@@ -3283,8 +3865,13 @@
             if isempty(app.StatusArea) || ~isvalid(app.StatusArea)
                 fprintf('%s\n', line);
             else
-                app.StatusArea.Value = [app.StatusArea.Value; {line}];
-                drawnow limitrate;
+                values = [cellstr(app.StatusArea.Value); {line}];
+                app.StatusArea.Value = values(max(1, end - 399):end);
+                stamp_now = now;
+                if app.LastLogDrawTime == 0 || (stamp_now - app.LastLogDrawTime) .* 86400 >= 0.15
+                    drawnow limitrate;
+                    app.LastLogDrawTime = stamp_now;
+                end
             end
         end
     end
