@@ -41,5 +41,5 @@ figure;
 plot(axis_meV, mean_PM, 'k-', 'LineWidth', 1.5);
 grid on;
 xlabel('Signed EM (meV)');
-ylabel('Mean PM');
-title('EELS-ZEST mean signed PM');
+ylabel('Mean sparse phonon source intensity');
+title('EELS-ZEST mean signed sparse phonon source intensity');

@@ -7,6 +7,8 @@ addpath(fileparts(fileparts(mfilename('fullpath'))));
 
 settings = struct();
 settings.run_stage2 = true;
+settings.save_plots = false;
+settings.save_diagnostic_plots = false;
 settings.stage2_temperature_algorithm = 'grid_scan';
 settings.spatial_refit_enabled = true;
 settings.test_output_dir = fullfile(pwd, 'eels_zest_reused_stage2_output');
