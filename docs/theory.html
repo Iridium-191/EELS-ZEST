@@ -6,6 +6,7 @@
   <title>EELS-ZEST Theory and Methods</title>
   <meta name="description" content="Theory and methods for EELS-ZEST zero-loss estimation, sparse phonon-mode source-intensity reconstruction, attention-guided Bose-Einstein thermometry, uncertainty, and reliability.">
   <meta name="author" content="Ruilin Mao, International Center for Quantum Materials (ICQM), Peking University">
+  <link rel="icon" type="image/png" href="../logo.png">
   <script>
     window.MathJax = {
       tex: {
@@ -527,7 +528,7 @@
           </div>
         </div>
       </div>
-      <div class="version">Theory and Methods / v2.0</div>
+      <div class="version">Theory and Methods / v2.1</div>
       <a class="home-link" href="../index.html">Back to documentation home</a>
       <div class="nav-title">Contents</div>
       <nav>
@@ -541,7 +542,7 @@
           <li><a href="#attention">7. Attention</a></li>
           <li><a href="#stage2">8. Stage 2 thermometry</a></li>
           <li><a href="#uncertainty">9. Reliability</a></li>
-          <li><a href="#spatial">10. Spatial diagnostics</a></li>
+          <li><a href="#spatial">10. Hierarchical spatial model</a></li>
           <li><a href="#intensity">11. Sparse intensity and RL</a></li>
           <li><a href="#terminology">12. Terminology</a></li>
         </ul>
@@ -561,12 +562,13 @@
 
       <main id="main-content">
         <header class="doc-header" id="overview">
-          <p class="eyebrow">EELS-ZEST v2.0</p>
+          <p class="eyebrow">EELS-ZEST v2.1</p>
           <h1>Theory and Methods</h1>
           <p>
             Mathematical definitions for fitted-ZLP sparse reconstruction,
-            attention-selected Bose-Einstein thermometry, uncertainty, spatial
-            diagnostics, and sparse phonon-mode source-intensity analysis.
+            hierarchical ZLP modeling, attention-selected Bose-Einstein
+            thermometry, ZLP-guided one-way inference, uncertainty, and
+            sparse phonon-mode source-intensity analysis.
           </p>
         </header>
 
@@ -575,8 +577,11 @@
           <p>
             EELS-ZEST separates the general problem of reconstructing an EELS
             spectrum from the more restrictive problem of inferring temperature.
-            Stage 1 explains spectral shape. Stage 2 constrains temperature only
-            with paired gain/loss evidence selected by attention.
+            Stage 1 explains spectral shape and, for complete datacubes, learns
+            spatially coherent ZLP families. Stage 2 constrains temperature only
+            with paired gain/loss evidence selected by attention. ZLP features
+            mark sharp interfaces and can guide one-way estimates for invalid
+            pixels without changing any data-valid temperature.
           </p>
           <div class="summary-grid">
             <div class="summary-item">
@@ -746,6 +751,27 @@
             amplitudes physically bounded. Any BE relation at this stage acts as
             a weak consistency cue rather than a hard temperature constraint.
           </p>
+          <h3>Datacube hierarchy and Stage 1 spatial residual</h3>
+          <p>
+            Clustering uses only the aligned, rank-limited SVD ZLP core. For
+            class \(c\), the per-pixel ZLP parameters are written
+            \(\theta_i=\theta_c+\delta_i\). Template and spatial terms augment
+            the pixel data objective:
+          </p>
+          \[
+          \mathcal L_{1,i}^{\mathrm{v2.1}}
+          =\mathcal L_{1,i}^{\mathrm{data}}
+          +\lambda_{\mathrm{tpl}}\rho(\phi_i-\bar\phi_{c_i})
+          +\lambda_{\mathrm{sp}}\sum_{j\in\mathcal N_i}
+          \omega_{ij}\,H_{1.5}(\phi_i-\phi_j).
+          \]
+          <p>
+            \(\phi\) contains component centers, log widths, Pearson shape, and
+            asymmetry. ZLP amplitudes and sparse phonon source intensities are
+            excluded. Edge weights combine prefit ZLP-shape distance and soft
+            cluster-probability overlap. Membership below 0.60 is an outlier
+            and is not forced onto a class template.
+          </p>
         </section>
 
         <section id="attention">
@@ -905,40 +931,37 @@
         </section>
 
         <section id="spatial">
-          <h2>10. Datacube Spatial Diagnostics</h2>
+          <h2>10. Soft ZLP Hierarchy And Interface-Guided Inference</h2>
           <p>
-            Datacube processing compares each fitted pixel with its local
-            neighborhood using temperature, attention-peak position,
-            signal-peak position, spectral profile, and fit quality:
+            Cluster probabilities \(q_{ic}\) continuously mix the class ZLP
+            templates. Both the template target and its admissible parameter
+            range vary smoothly through uncertain class boundaries:
           </p>
           \[
-          D_{\mathrm{nbr}}(x,y)
-          =
-          \operatorname{median}_{(u,v)\in\mathcal N(x,y)}
-          \left[
-          \alpha_T |T_{xy}-T_{uv}|
-          +
-          \alpha_A \Delta A_{xy,uv}
-          +
-          \alpha_S \Delta S_{xy,uv}
-          \right].
+          \bar\phi_i=\sum_c q_{ic}\phi_c,
+          \qquad
+          s_i^2=\sum_c q_{ic}\left[s_c^2+(\phi_c-\bar\phi_i)^2\right].
           \]
           <p>
-            Feature-aware weights reduce coupling across likely material
-            interfaces:
+            A robust score computed only from neighboring ZLP features detects
+            sharp interfaces. Extremely high single-edge scores are accepted
+            directly; moderate scores require coherent support along the edge.
+            Marked edges contribute no Stage 1 ZLP spatial loss.
           </p>
           \[
-          \omega_{\mathrm{edge}}(x,y;u,v)
-          =
-          \exp\left[
-          -\gamma\,
-          \Delta_{\mathrm{feature}}(x,y;u,v)
-          \right].
+          \mathcal L_{\mathrm{ZLP,spatial}}
+          =\lambda_Z\!\sum_{(i,j)\notin\mathcal E_{\mathrm{sharp}}}
+          \omega_{ij}H_\delta(\phi_i-\phi_j).
           \]
           <p>
-            Spatial repair targets isolated low-reliability pixels. Interface
-            pixels are identified from spectral changes so genuine material
-            boundaries are not flattened into neighboring temperatures.
+            Temperature has no pairwise spatial penalty. `T_map_data_valid`
+            keeps only pixel-local, two-sided, sufficiently constrained Stage 2
+            results. Every such temperature is copied unchanged into
+            `T_map_joint`. A data-invalid pixel may be inferred from at least two
+            valid ZLP-connected neighbors, but never across a sharp edge; an
+            inferred pixel cannot influence an anchor or another inferred pixel.
+            The interface score/mask and spatial-inference mask make both
+            decisions auditable.
           </p>
         </section>
 

@@ -139,7 +139,7 @@ k^\star=\arg\min_k\frac{s_{L,k}+s_{R,k}}{2}.
 K(E)\leftarrow \frac{K(E)}{\sum_i K(E_i)}.
 \]
 
-v2.0 默认使用 `fitted_zlp`，使卷积核直接来自拟合后的总 ZLP/仪器响应。`core_component` 仍可作为调试选项，但不再作为默认值，因为单个窄分量的中心可能偏离总 ZLP 峰心，导致 Stokes/anti-Stokes 卷积峰产生系统性位移。
+v2.1 beta 延续 `fitted_zlp` 默认路径，使卷积核直接来自拟合后的总 ZLP/仪器响应。`core_component` 仍可作为调试选项，但不再作为默认值，因为单个窄分量的中心可能偏离总 ZLP 峰心，导致 Stokes/anti-Stokes 卷积峰产生系统性位移。
 
 ---
 
@@ -519,6 +519,51 @@ tail overshoot 不是普通正则，而是可作为不等式约束加入线性�
 \]
 
 物理意义：高频尾部信号弱，模型稍微高于数据就会形成“抬尾”。这个约束防止 ZLP 或源强度在远端拖尾处系统性高估。
+
+### 4.10 v2.1 分层 ZLP 模板损失
+
+完整 datacube 先进行一次仅含 Stage 1 的 probe。聚类特征只来自对齐并经
+rank-limited SVD 的 ZLP 核心谱形、左右半宽、偏度、尾部比例、核心面积和
+邻域 ZLP 一致性，不使用温度、PDOS、声子峰位或全谱 (R^2)。
+
+对像素 (i) 和类别 (c_i)，写成
+
+\[
+\theta_{Z,i}=\theta_{Z,c_i}+\delta_i.
+\]
+
+模板损失为
+
+\[
+\mathcal L_\mathrm{template}
+=\lambda_\mathrm{template}
+\rho\!\left(
+\frac{\phi(\theta_{Z,i})-\bar\phi_{c_i}}
+{s_{c_i}}
+\right),
+\]
+
+其中 \(\phi\) 只包含峰心、log 宽度、Pearson 形状和非对称性。ZLP 振幅与
+稀疏声子模态源强度不进入模板损失。最大归属概率低于 `0.60` 的像素标记为
+outlier，不强制使用类别模板。
+
+### 4.11 v2.1 Stage 1 空间 Huber 损失
+
+8 邻域空间项为
+
+\[
+\mathcal L_\mathrm{spatial}
+=\lambda_\mathrm{spatial}
+\sum_{j\in\mathcal N_i}
+\omega_{ij}
+H_{1.5}\!\left(
+\frac{\phi_i-\phi_j}{s_{c_i}}
+\right).
+\]
+
+边权由拟合前 ZLP 谱形距离和软聚类概率重叠决定。第一轮对全部有效像素
+polish；第二轮只更新空间损失最高的 35%。模板和空间项默认分别占初始
+Stage 1 data cost 的 5% 和 3%。
 
 ---
 
@@ -1419,6 +1464,47 @@ f_j=
 
 ## 10. 参数表
 
+### 10.0 v2.1 分层与空间参数
+
+| 参数 | 默认值 | 作用 |
+|---|---:|---|
+| `stage1_hierarchical_enabled` | `true` | 启用 ZLP-only 聚类和类模板 |
+| `stage1_cluster_count` | `0` | `0` 表示在 `K=1:4` 中自动选择 |
+| `stage1_cluster_membership_min` | `0.60` | 低于该值标记为 outlier |
+| `stage1_cluster_soft_constraints_enabled` | `true` | 用 soft membership 连续混合模板目标和参数范围 |
+| `stage1_spatial_zlp_enabled` | `true` | 启用 Stage 1 的 8 邻域 Huber 项 |
+| `stage1_spatial_zlp_weight` | `0.03` | 空间项相对初始 data cost 的权重 |
+| `stage1_spatial_zlp_iterations` | `2` | 四色空间更新轮数 |
+| `stage1_zlp_interface_enabled` | `true` | 用 ZLP-only edge score 检测 sharp interface |
+| `stage1_zlp_interface_score_threshold` | `3.5` | 单边极高分直接判为界面 |
+| `stage1_zlp_interface_coherent_score_threshold` | `1.25` | 连续中高分界面的低阈值 |
+| `stage1_zlp_interface_min_coherent_neighbors` | `2` | 同方向最少连续支持边数 |
+| `stage2_spatial_map_enabled` | `true` | 启用 ZLP 引导的单向无效点推断；不平滑温度 |
+| `stage2_zlp_guided_inference_enabled` | `true` | 允许至少两个同侧有效邻居为无效点提供推断值 |
+
+soft membership 对类别模板和尺度进行连续混合：
+
+\[
+\bar\phi_i=\sum_c q_{ic}\phi_c,
+\qquad
+s_i^2=\sum_c q_{ic}\left[s_c^2+(\phi_c-\bar\phi_i)^2\right].
+\]
+
+ZLP 空间损失只在没有跨越 sharp interface 的边上计算：
+
+\[
+\mathcal L_{\mathrm{ZLP,spatial}}
+=\lambda_Z\sum_{(i,j)\notin\mathcal E_{\mathrm{sharp}}}
+\omega_{ij}H_\delta(\phi_i-\phi_j).
+\]
+
+温度不包含 \(T_i-T_j\) 空间惩罚。边界 valley、单边 valley、hard pair
+不足或不确定度过大的像素不作为 Data-valid 锚点。`T_map_joint` 首先原样
+复制 Data-valid 温度；只有至少两个同侧有效邻居时，才为无效像素输出带
+`T_spatial_inferred_mask` 标记的 ZLP 引导推断值。推断值不参与后续传播，
+也不能反向改变有效锚点。`zlp_interface_score_map`、`zlp_interface_mask`
+和方向 edge maps 记录界面位置。
+
 ### 10.1 Stage 1 模型与 ZLP 参数
 
 | 参数 | 默认值 | 作用 | 调参建议 |
@@ -1559,7 +1645,7 @@ attention 的本质是一个“温度证据选择器”：
 +\sum_m p_m^{-}K(E+\varepsilon_m).
 \]
 
-其中 \(Z(E)\) 由多分量不对称 Pearson 或 pseudo-Voigt 函数表示，卷积核 \(K(E)\) 由拟合得到的 ZLP 分量归一化得到。第一阶段通过非负加权最小二乘拟合 \(Z(E)\)、\(p_m^{+}\) 与 \(p_m^{-}\)，并引入源强度平滑、稀疏性、ZLP signal guard 和 soft Bose--Einstein penalty，以保证谱形复现和物理可解释性。第二阶段基于第一阶段的源强度与残差构造 attention score，用于选择 Stokes/anti-Stokes 均具有可靠特征的温度证据窗口。在这些高置信 EM 上施加 hard Bose--Einstein detailed-balance 关系 \(p_m^{-}=p_m^{+}\exp[-\varepsilon_m/(k_\mathrm{B}T)]\)，而窗口外或低置信区域保留独立的 soft 源强度，以避免温度约束破坏谱线形状。最终温度通过最小化温度相关的加权残差、正则残差、overshoot penalty 与邻域先验得到。拟合可靠性由 attention 覆盖率、谱线拟合优度和 temperature-cost valley 宽度共同评估。
+其中 \(Z(E)\) 由多分量不对称 Pearson 或 pseudo-Voigt 函数表示，卷积核 \(K(E)\) 由拟合得到的 ZLP 分量归一化得到。第一阶段通过非负加权最小二乘拟合 \(Z(E)\)、\(p_m^{+}\) 与 \(p_m^{-}\)，并引入源强度平滑、稀疏性、ZLP signal guard 和 soft Bose--Einstein penalty，以保证谱形复现和物理可解释性。第二阶段基于第一阶段的源强度与残差构造 attention score，用于选择 Stokes/anti-Stokes 均具有可靠特征的温度证据窗口。在这些高置信 EM 上施加 hard Bose--Einstein detailed-balance 关系 \(p_m^{-}=p_m^{+}\exp[-\varepsilon_m/(k_\mathrm{B}T)]\)，而窗口外或低置信区域保留独立的 soft 源强度，以避免温度约束破坏谱线形状。逐像素温度通过最小化温度相关的加权残差、正则残差与 overshoot penalty 得到，不引入任何相邻温度差惩罚。Data-valid 温度原样保留；仅对数据不充分的像素，允许在不跨越 ZLP sharp interface 的前提下，使用至少两个 Data-valid 邻居给出带标记的单向推断，且推断值不会反向影响数据锚点或其他推断点。拟合可靠性由 attention 覆盖率、谱线拟合优度和 temperature-cost valley 宽度共同评估。
 
 ---
 
