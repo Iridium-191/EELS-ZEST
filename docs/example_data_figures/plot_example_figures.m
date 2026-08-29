@@ -199,7 +199,7 @@ function fig = local_figure2(S)
     ax2.GridAlpha = 0.45;
     ax2.LineWidth = 0.7;
     ax2.TickDir = 'out';
-    xlabel(ax2, 'PM center energy (meV)');
+    xlabel(ax2, 'Sparse source energy (meV)');
     ylabel(ax2, 'ln(P_{loss}/P_{gain})');
     xlim(ax2, [0 100]);
     ymax = max([be_y(:); S.be_slope .* xx(:)], [], 'omitnan');

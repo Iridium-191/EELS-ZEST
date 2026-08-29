@@ -4,7 +4,7 @@ function export_example_figure_data()
 % Workflow:
 %   example_data.mat -> crop [-250,250] meV -> SVD/PCA denoise ->
 %   pick a high-signal single spectrum -> EELS-ZEST 2.0 Stage1/Stage2 ->
-%   PM-guided deconvolution and BE-linearity diagnostics.
+%   sparse-source-guided deconvolution and BE-linearity diagnostics.
 
     script_dir = fileparts(mfilename('fullpath'));
     zest_dir = fileparts(fileparts(script_dir));
