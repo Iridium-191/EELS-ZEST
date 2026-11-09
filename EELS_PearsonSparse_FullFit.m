@@ -7,12 +7,25 @@ classdef EELS_PearsonSparse_FullFit
     %   BE detailed balance is only a soft penalty in the optimizer.
     %
     % Stage 2:
-    %   Placeholder temperature-window hard-BE refinement using Stage-1 PM as
-    %   the initial source. The first development target is Stage 1 fidelity.
+    %   Attention-selected hard-BE temperature scan with independent soft PM.
+    %   C++ numerical kernels are selected with native_backend='auto'/'cpp'.
 
     methods (Static)
         function settings = defaults(settings)
             if nargin < 1 || isempty(settings), settings = struct(); end
+            settings = eels_normalize_settings(settings);
+            settings = EELS_FitWeights.defaults(settings);
+            if ~isfield(settings,'adaptive_zlp_region_method'), settings.adaptive_zlp_region_method='fwhm'; end
+            if ~isfield(settings,'zlp_fwhm_guard_factor'), settings.zlp_fwhm_guard_factor=1.25; end
+            if ~isfield(settings,'zlp_fwhm_core_factor'), settings.zlp_fwhm_core_factor=1.0; end
+            if ~isfield(settings,'zlp_fwhm_min_halfwidth_meV'), settings.zlp_fwhm_min_halfwidth_meV=2; end
+            if ~isfield(settings,'zlp_fwhm_max_halfwidth_meV'), settings.zlp_fwhm_max_halfwidth_meV=28; end
+            if ~isfield(settings,'stage1_initial_width_scale'), settings.stage1_initial_width_scale=1; end
+            if ~isfield(settings,'stage1_be_soft_scale'), settings.stage1_be_soft_scale=1; end
+            if ~isfield(settings,'stage1_em_step_scale'), settings.stage1_em_step_scale=1; end
+            if ~isfield(settings,'stage2_attention_start_scale'), settings.stage2_attention_start_scale=1; end
+            if ~isfield(settings,'stage2_attention_span_scale'), settings.stage2_attention_span_scale=1; end
+            if ~isfield(settings, 'native_backend'), settings.native_backend = 'auto'; end
             if ~isfield(settings, 'crop_range'), settings.crop_range = [-Inf, Inf]; end
             if ~isfield(settings, 'num_zlp_components'), settings.num_zlp_components = 4; end
             if ~isfield(settings, 'zlp_model_type'), settings.zlp_model_type = 'asym_pearson'; end
@@ -82,7 +95,6 @@ classdef EELS_PearsonSparse_FullFit
             if ~isfield(settings, 'stage1_zlp_gain_shape_heavy_factor'), settings.stage1_zlp_gain_shape_heavy_factor = 0.86; end
             if ~isfield(settings, 'stage1_zlp_loss_shape_light_factor'), settings.stage1_zlp_loss_shape_light_factor = 1.12; end
             settings.use_bg = false;
-            settings.bg_order = 0;
             if ~isfield(settings, 'em_min_meV'), settings.em_min_meV = 8; end
             if ~isfield(settings, 'em_max_meV'), settings.em_max_meV = []; end
             if ~isfield(settings, 'em_step_meV'), settings.em_step_meV = 6; end
@@ -106,8 +118,7 @@ classdef EELS_PearsonSparse_FullFit
             if ~isfield(settings, 'lambda_be_soft'), settings.lambda_be_soft = 1e-3; end
             if ~isfield(settings, 'lambda_pm_smooth'), settings.lambda_pm_smooth = 3e-3; end
             if ~isfield(settings, 'lambda_pm_l2'), settings.lambda_pm_l2 = 2e-5; end
-            if ~isfield(settings, 'lambda_pm_l1'), settings.lambda_pm_l1 = 3e-5; end
-            settings.lambda_bg_l2 = 0;
+            if ~isfield(settings, 'lambda_pm_l1'), settings.lambda_pm_l1 = 0; end
             if ~isfield(settings, 'inner_solver'), settings.inner_solver = 'auto'; end
             if ~isfield(settings, 'nonlinear_inner_solver'), settings.nonlinear_inner_solver = 'lsqlin'; end
             if ~isfield(settings, 'nonlinear_tail_overshoot_constraint'), settings.nonlinear_tail_overshoot_constraint = false; end
@@ -159,7 +170,7 @@ classdef EELS_PearsonSparse_FullFit
             if ~isfield(settings, 'stage2_attention_window_meV'), settings.stage2_attention_window_meV = [40, 230]; end
             if ~isfield(settings, 'stage2_temperature_algorithm'), settings.stage2_temperature_algorithm = 'grid_scan'; end
             if ~isfield(settings, 'stage2_T_grid'), settings.stage2_T_grid = 80:20:1800; end
-            if ~isfield(settings, 'stage2_scan_inner_solver'), settings.stage2_scan_inner_solver = 'lsqnonneg'; end
+            if ~isfield(settings, 'stage2_scan_inner_solver'), settings.stage2_scan_inner_solver = 'lsqlin'; end
             if ~isfield(settings, 'stage2_scan_tail_overshoot_constraint'), settings.stage2_scan_tail_overshoot_constraint = false; end
             if ~isfield(settings, 'stage2_adaptive_grid_scan_enabled'), settings.stage2_adaptive_grid_scan_enabled = true; end
             if ~isfield(settings, 'stage2_adaptive_grid_min_full_points'), settings.stage2_adaptive_grid_min_full_points = 25; end
@@ -173,6 +184,7 @@ classdef EELS_PearsonSparse_FullFit
             if ~isfield(settings, 'stage2_pm_smooth_weight'), settings.stage2_pm_smooth_weight = 1.2e-3; end
             if ~isfield(settings, 'stage2_pm_smooth_max_gap_meV'), settings.stage2_pm_smooth_max_gap_meV = 6; end
             if ~isfield(settings, 'stage2_attention_hardbe_only_enabled'), settings.stage2_attention_hardbe_only_enabled = true; end
+            if ~isfield(settings, 'stage2_fixed_hard_be_window_meV'), settings.stage2_fixed_hard_be_window_meV = []; end
             if ~isfield(settings, 'stage2_hard_be_pair_threshold'), settings.stage2_hard_be_pair_threshold = 0.35; end
             if ~isfield(settings, 'stage2_hard_be_pair_floor'), settings.stage2_hard_be_pair_floor = 0.10; end
             if ~isfield(settings, 'stage2_hard_dense_em_enabled'), settings.stage2_hard_dense_em_enabled = false; end
@@ -192,7 +204,6 @@ classdef EELS_PearsonSparse_FullFit
             if ~isfield(settings, 'stage2_soft_pm_stage1_prior_weight'), settings.stage2_soft_pm_stage1_prior_weight = 0; end
             if ~isfield(settings, 'stage2_soft_be_weight'), settings.stage2_soft_be_weight = 0; end
             if ~isfield(settings, 'stage2_pm_ratio_plot_hide_flyers'), settings.stage2_pm_ratio_plot_hide_flyers = true; end
-            if ~isfield(settings, 'stage2_pm_ratio_plot_flyer_min_residual'), settings.stage2_pm_ratio_plot_flyer_min_residual = 1.25; end
             if ~isfield(settings, 'stage2_pm_ratio_plot_flyer_weight_fraction'), settings.stage2_pm_ratio_plot_flyer_weight_fraction = 0.30; end
             if ~isfield(settings, 'stage2_regularization_cost_weight'), settings.stage2_regularization_cost_weight = 1.0; end
             if ~isfield(settings, 'stage2_far_tail_downweight_enabled'), settings.stage2_far_tail_downweight_enabled = true; end
@@ -206,14 +217,11 @@ classdef EELS_PearsonSparse_FullFit
             if ~isfield(settings, 'stage2_attention_gain'), settings.stage2_attention_gain = 9; end
             if ~isfield(settings, 'stage2_attention_peak_sigma_meV'), settings.stage2_attention_peak_sigma_meV = 5; end
             if ~isfield(settings, 'stage2_attention_threshold'), settings.stage2_attention_threshold = 0.18; end
-            if ~isfield(settings, 'stage2_attention_fit_enabled'), settings.stage2_attention_fit_enabled = true; end
             if ~isfield(settings, 'stage2_attention_fit_threshold'), settings.stage2_attention_fit_threshold = 0.10; end
-            if ~isfield(settings, 'stage2_attention_fit_expand_meV'), settings.stage2_attention_fit_expand_meV = 8; end
             if ~isfield(settings, 'stage2_attention_tail_enabled'), settings.stage2_attention_tail_enabled = true; end
             if ~isfield(settings, 'stage2_attention_tail_min_abs_meV'), settings.stage2_attention_tail_min_abs_meV = 70; end
             if ~isfield(settings, 'stage2_attention_tail_signal_threshold'), settings.stage2_attention_tail_signal_threshold = 0.10; end
             if ~isfield(settings, 'stage2_attention_tail_soft_width'), settings.stage2_attention_tail_soft_width = 0.05; end
-            if ~isfield(settings, 'stage2_attention_tail_pair_release_threshold'), settings.stage2_attention_tail_pair_release_threshold = 0.10; end
             if ~isfield(settings, 'stage2_allow_aggressive_antistokes'), settings.stage2_allow_aggressive_antistokes = false; end
             if ~isfield(settings, 'stage2_antistokes_attention_boost'), settings.stage2_antistokes_attention_boost = 1.35; end
             if ~isfield(settings, 'stage2_antistokes_fit_weight_boost'), settings.stage2_antistokes_fit_weight_boost = 1.45; end
@@ -225,8 +233,6 @@ classdef EELS_PearsonSparse_FullFit
             end
             if ~isfield(settings, 'stage2_fit_sigmoid_taper_meV'), settings.stage2_fit_sigmoid_taper_meV = 10; end
             if ~isfield(settings, 'stage2_fit_sigmoid_min_weight'), settings.stage2_fit_sigmoid_min_weight = 0.08; end
-            if ~isfield(settings, 'stage2_transition_fit_enabled'), settings.stage2_transition_fit_enabled = false; end
-            if ~isfield(settings, 'stage2_transition_min_meV'), settings.stage2_transition_min_meV = 14; end
             if ~isfield(settings, 'stage2_zlp_refine_enabled'), settings.stage2_zlp_refine_enabled = true; end
             if ~isfield(settings, 'stage2_zlp_refine_scale_enabled'), settings.stage2_zlp_refine_scale_enabled = true; end
             if ~isfield(settings, 'stage2_zlp_refine_tilt_enabled'), settings.stage2_zlp_refine_tilt_enabled = true; end
@@ -260,19 +266,7 @@ classdef EELS_PearsonSparse_FullFit
             if ~isfield(settings, 'stage2_ratio_best_line_right_edge_median_residual_max'), settings.stage2_ratio_best_line_right_edge_median_residual_max = 0.55; end
             if ~isfield(settings, 'stage2_ratio_best_line_right_edge_max_residual_max'), settings.stage2_ratio_best_line_right_edge_max_residual_max = 1.10; end
             if ~isfield(settings, 'stage2_ratio_best_line_allow_all_fallback'), settings.stage2_ratio_best_line_allow_all_fallback = false; end
-            if ~isfield(settings, 'stage2_report_ratio_source'), settings.stage2_report_ratio_source = 'stage1_pm_ratio'; end
-            if ~isfield(settings, 'stage2_report_ratio_require_reliable'), settings.stage2_report_ratio_require_reliable = true; end
             if ~isfield(settings, 'stage2_boundary_margin_K'), settings.stage2_boundary_margin_K = 40; end
-            if ~isfield(settings, 'stage2_outlier_refit_top_loss_count'), settings.stage2_outlier_refit_top_loss_count = 3; end
-            if ~isfield(settings, 'stage2_outlier_refit_loss_weight_boost'), settings.stage2_outlier_refit_loss_weight_boost = 1.35; end
-            if ~isfield(settings, 'stage2_outlier_refit_attention_boost'), settings.stage2_outlier_refit_attention_boost = 1.25; end
-            if ~isfield(settings, 'stage2_outlier_refit_l1_boost'), settings.stage2_outlier_refit_l1_boost = 1.45; end
-            if ~isfield(settings, 'stage2_outlier_refit_l2_boost'), settings.stage2_outlier_refit_l2_boost = 2.0; end
-            if ~isfield(settings, 'stage2_outlier_refit_smooth_boost'), settings.stage2_outlier_refit_smooth_boost = 2.2; end
-            if ~isfield(settings, 'stage2_outlier_refit_low_R2_extra_boost'), settings.stage2_outlier_refit_low_R2_extra_boost = 1.35; end
-            if ~isfield(settings, 'stage2_outlier_refit_max_l1'), settings.stage2_outlier_refit_max_l1 = 2.5e-5; end
-            if ~isfield(settings, 'stage2_outlier_refit_max_l2'), settings.stage2_outlier_refit_max_l2 = 5.0e-6; end
-            if ~isfield(settings, 'stage2_outlier_refit_max_smooth'), settings.stage2_outlier_refit_max_smooth = 1.8e-3; end
             if ~isfield(settings, 'test_output_dir'), settings.test_output_dir = fullfile('pearson_sparse_fullfit', 'test_outputs'); end
             if ~isfield(settings, 'test_indices'), settings.test_indices = []; end
             if ~isfield(settings, 'test_max_spectra'), settings.test_max_spectra = 6; end
@@ -281,7 +275,7 @@ classdef EELS_PearsonSparse_FullFit
             if ~isfield(settings, 'datacube_random_seed'), settings.datacube_random_seed = []; end
             if ~isfield(settings, 'datacube_use_warm_start'), settings.datacube_use_warm_start = true; end
             if ~isfield(settings, 'datacube_parallel_enabled'), settings.datacube_parallel_enabled = false; end
-            if ~isfield(settings, 'datacube_parallel_workers'), settings.datacube_parallel_workers = 0; end
+            if ~isfield(settings, 'datacube_parallel_workers'), settings.datacube_parallel_workers = 8; end
             if ~isfield(settings, 'datacube_parallel_min_pixels'), settings.datacube_parallel_min_pixels = 8; end
             if ~isfield(settings, 'datacube_parallel_chunks'), settings.datacube_parallel_chunks = 0; end
             if ~isfield(settings, 'datacube_parallel_phase_batch_size'), settings.datacube_parallel_phase_batch_size = 0; end
@@ -291,7 +285,6 @@ classdef EELS_PearsonSparse_FullFit
             if ~isfield(settings, 'datacube_checkpoint_enabled'), settings.datacube_checkpoint_enabled = false; end
             if ~isfield(settings, 'datacube_resume_checkpoint'), settings.datacube_resume_checkpoint = false; end
             if ~isfield(settings, 'datacube_checkpoint_every'), settings.datacube_checkpoint_every = 25; end
-            if ~isfield(settings, 'datacube_benchmark_repeats'), settings.datacube_benchmark_repeats = 1; end
             if ~isfield(settings, 'datacube_progress_every'), settings.datacube_progress_every = 25; end
             if ~isfield(settings, 'datacube_progress_callback'), settings.datacube_progress_callback = []; end
             if ~isfield(settings, 'datacube_stop_callback'), settings.datacube_stop_callback = []; end
@@ -335,7 +328,6 @@ classdef EELS_PearsonSparse_FullFit
             if isfield(settings, 'energy_bin')
                 settings.datacube_energy_bin = settings.energy_bin;
             end
-            if ~isfield(settings, 'spatial_neighbor_enabled'), settings.spatial_neighbor_enabled = true; end
             if ~isfield(settings, 'spatial_neighbor_weight'), settings.spatial_neighbor_weight = 0.25; end
             if ~isfield(settings, 'spatial_interface_attention_weight'), settings.spatial_interface_attention_weight = 0.65; end
             if ~isfield(settings, 'spatial_edge_sigma'), settings.spatial_edge_sigma = 0.18; end
@@ -374,7 +366,6 @@ classdef EELS_PearsonSparse_FullFit
             if ~isfield(settings, 'spatial_region_refit_min_pixels'), settings.spatial_region_refit_min_pixels = 8; end
             if ~isfield(settings, 'spatial_region_refit_weight'), settings.spatial_region_refit_weight = 0.55; end
             if ~isfield(settings, 'spatial_region_refit_delta_K'), settings.spatial_region_refit_delta_K = 80; end
-            if ~isfield(settings, 'spatial_region_refit_profile_delta_max'), settings.spatial_region_refit_profile_delta_max = 0.38; end
             if ~isfield(settings, 'spatial_region_post_smooth_enabled'), settings.spatial_region_post_smooth_enabled = true; end
             if ~isfield(settings, 'spatial_region_post_smooth_iterations'), settings.spatial_region_post_smooth_iterations = 2; end
             if ~isfield(settings, 'spatial_region_post_smooth_weight'), settings.spatial_region_post_smooth_weight = 0.0; end
@@ -418,13 +409,7 @@ classdef EELS_PearsonSparse_FullFit
             if ~isfield(settings, 'stage1_hierarchical_spatial_max_iter'), settings.stage1_hierarchical_spatial_max_iter = 7; end
             if ~isfield(settings, 'stage1_hierarchy_context'), settings.stage1_hierarchy_context = struct(); end
             if ~isfield(settings, 'stage2_spatial_map_enabled'), settings.stage2_spatial_map_enabled = true; end
-            if ~isfield(settings, 'stage2_spatial_map_weight'), settings.stage2_spatial_map_weight = 0.08; end
-            if ~isfield(settings, 'stage2_spatial_map_huber_scale_K'), settings.stage2_spatial_map_huber_scale_K = 40; end
-            if ~isfield(settings, 'stage2_spatial_map_truncation_K'), settings.stage2_spatial_map_truncation_K = 120; end
-            if ~isfield(settings, 'stage2_spatial_map_step_K'), settings.stage2_spatial_map_step_K = 5; end
-            if ~isfield(settings, 'stage2_spatial_map_iterations'), settings.stage2_spatial_map_iterations = 4; end
             if ~isfield(settings, 'stage2_spatial_map_cluster_floor'), settings.stage2_spatial_map_cluster_floor = 0.15; end
-            if ~isfield(settings, 'stage2_spatial_map_anchor_reliability'), settings.stage2_spatial_map_anchor_reliability = 0.75; end
             if ~isfield(settings, 'stage2_spatial_map_valid_reliability'), settings.stage2_spatial_map_valid_reliability = 0.25; end
             if ~isfield(settings, 'stage2_spatial_map_max_uncertainty_K'), settings.stage2_spatial_map_max_uncertainty_K = 420; end
             if ~isfield(settings, 'stage2_spatial_map_min_neighbor_support'), settings.stage2_spatial_map_min_neighbor_support = 2; end
@@ -445,9 +430,7 @@ classdef EELS_PearsonSparse_FullFit
             end
             settings.software_version = '2.1.0';
             settings.stage2_version = '2.1-attention-hardBE-soft-intensity-zlp-guided';
-            settings.stage2_temperature_algorithm = 'grid_scan';
-            settings.stage2_scan_inner_solver = 'lsqlin';
-            settings.stage2_pm_smooth_weight = max(settings.stage2_pm_smooth_weight, 1.2e-3);
+            settings.stage2_pm_smooth_weight = max(settings.stage2_pm_smooth_weight, 0);
             if ~isfield(settings, 'stage2_soft_pm_smooth_weight') || ...
                     ~isfinite(settings.stage2_soft_pm_smooth_weight) || settings.stage2_soft_pm_smooth_weight < 0
                 settings.stage2_soft_pm_smooth_weight = settings.stage2_pm_smooth_weight;
@@ -613,7 +596,9 @@ classdef EELS_PearsonSparse_FullFit
                 EELS_PearsonSparse_FullFit.notify_progress(settings, np, np, toc(timer0), pixel_time, ...
                     'parallel workers released');
             end
-            cuberes = EELS_PearsonSparse_FullFit.rebuild_datacube_maps_from_results(cuberes, settings, pixel_time, timer0, true);
+            execution = struct('parallel_enabled',use_parallel,'parallel_workers',parallel_workers, ...
+                'parallel_message',parallel_message);
+            cuberes = EELS_PearsonSparse_FullFit.rebuild_datacube_maps_from_results(cuberes, settings, pixel_time, timer0, true,execution);
         end
 
         function cuberes = solve_datacube(filename, settings)
@@ -701,6 +686,8 @@ classdef EELS_PearsonSparse_FullFit
                     round_settings.(fields{kk}) = rounds(rr).(fields{kk});
                 end
                 round_settings = EELS_PearsonSparse_FullFit.defaults(round_settings);
+                round_settings.lambda_be_soft=round_settings.lambda_be_soft*settings.stage1_be_soft_scale;
+                round_settings.em_step_meV=round_settings.em_step_meV*settings.stage1_em_step_scale;
                 EM = EELS_PearsonSparse_FullFit.make_em_grid(ene, round_settings);
                 theta0 = EELS_PearsonSparse_FullFit.initial_theta(ene_opt, y_norm_opt, round_settings, prev_theta);
                 [lb, ub] = EELS_PearsonSparse_FullFit.theta_bounds(round_settings);
@@ -708,8 +695,8 @@ classdef EELS_PearsonSparse_FullFit
                 obj_settings.inner_solver = round_settings.nonlinear_inner_solver;
                 obj_settings.tail_overshoot_constraint = round_settings.nonlinear_tail_overshoot_constraint;
                 obj_settings.lambda_pm_l1 = 0;
-                obj = @(theta) EELS_PearsonSparse_FullFit.stage1_objective(theta, ene_opt, y_norm_opt, EM, obj_settings);
-                [theta_opt, resnorm, exitflag, output] = EELS_PearsonSparse_FullFit.run_lsq(obj, theta0, lb, ub, round_settings);
+                [theta_opt, resnorm, exitflag, output] = EELS_PearsonSparse_FullFit.run_stage1_nonlinear( ...
+                    ene_opt, y_norm_opt, EM, obj_settings, theta0, lb, ub, round_settings);
                 fit_fast = EELS_PearsonSparse_FullFit.decode_stage1(theta_opt, ene, y_norm, EM, obj_settings);
                 fit_candidate = EELS_PearsonSparse_FullFit.decode_stage1(theta_opt, ene, y_norm, EM, round_settings);
                 fit = EELS_PearsonSparse_FullFit.select_stage1_candidate(fit_fast, fit_candidate, ene, y_norm, round_settings);
@@ -778,9 +765,9 @@ classdef EELS_PearsonSparse_FullFit
             obj_settings.lambda_pm_l1 = 0;
             [lb, ub] = EELS_PearsonSparse_FullFit.theta_bounds(polish_settings);
             theta0 = min(max(best.theta, lb), ub);
-            obj = @(theta) EELS_PearsonSparse_FullFit.stage1_objective(theta, ene, y_norm, best.EM, obj_settings);
             t_polish = tic;
-            [theta_opt, resnorm, exitflag, output] = EELS_PearsonSparse_FullFit.run_lsq(obj, theta0, lb, ub, polish_settings);
+            [theta_opt, resnorm, exitflag, output] = EELS_PearsonSparse_FullFit.run_stage1_nonlinear( ...
+                ene, y_norm, best.EM, obj_settings, theta0, lb, ub, polish_settings);
             fit_fast = EELS_PearsonSparse_FullFit.decode_stage1(theta_opt, ene, y_norm, best.EM, obj_settings);
             fit_candidate = EELS_PearsonSparse_FullFit.decode_stage1(theta_opt, ene, y_norm, best.EM, polish_settings);
             fit = EELS_PearsonSparse_FullFit.select_stage1_candidate(fit_fast, fit_candidate, ene, y_norm, polish_settings);
@@ -863,6 +850,8 @@ classdef EELS_PearsonSparse_FullFit
             ene = stage1_result.ene_raw(:);
             ene_corr = stage1_result.ene_corrected(:);
             y_norm = stage1_result.raw_data_norm(:);
+            [settings,result.zlp_region_policy] = EELS_PearsonSparse_FullFit.adaptive_zlp_region_settings(ene_corr,y_norm,settings);
+            result.settings = settings;
             params = stage1_result.stage1.params;
             zlp_norm = stage1_result.stage1.zlp_norm(:);
             win = sort(abs(settings.stage2_window_meV(:).'));
@@ -931,7 +920,7 @@ classdef EELS_PearsonSparse_FullFit
                 [A, kernels] = EELS_PearsonSparse_FullFit.replace_signal_kernel_columns( ...
                     A, layout, ene_corr(:), basis.EM_all(:).', zlp_norm(:));
             end
-            base_sqrtW = EELS_PearsonSparse_FullFit.build_weights(ene_corr, y_norm, settings);
+            base_sqrtW = EELS_PearsonSparse_FullFit.build_weights(ene_corr, y_norm, settings, 0);
             joint_floor = min(max(settings.stage2_global_joint_weight_floor, 0.01), 1);
             local_profile = (soft_floor + (1 - soft_floor) .* fit_alpha(:)) .* attention.weight(:);
             joint_profile = max(joint_floor, min(max(local_profile(:), 0), 1));
@@ -942,6 +931,18 @@ classdef EELS_PearsonSparse_FullFit
             end
             sqrtW = EELS_PearsonSparse_FullFit.apply_stage2_far_tail_downweight(ene_corr, sqrtW, settings, attention);
             attention.joint_weight_profile = joint_profile(:);
+            reference_sqrtW=sqrtW;
+            multiplier=ones(size(sqrtW));
+            if EELS_FitWeights.stage2Active(settings)
+                region_sqrtW=EELS_PearsonSparse_FullFit.build_weights(ene_corr,y_norm,settings,2);
+                regional_ratio=(region_sqrtW(:)./base_sqrtW(:)).^2;
+                [sqrtW,multiplier]=EELS_FitWeights.stage2(reference_sqrtW,regional_ratio,fit_alpha,pair_feature,settings);
+            end
+            attention.data_weight_policy=struct('reference_weights',reference_sqrtW(:).^2, ...
+                'effective_weights',sqrtW(:).^2,'relative_multiplier',multiplier, ...
+                'relative_bounds',[.25 4],'sum_ratio',sum(sqrtW.^2)/sum(reference_sqrtW.^2), ...
+                'attention_strength',settings.stage2_attention_weight_strength);
+
 
             scan_settings = settings;
             scan_settings.inner_solver = settings.stage2_scan_inner_solver;
@@ -970,6 +971,16 @@ classdef EELS_PearsonSparse_FullFit
             result.message = 'Stage 2 v2.1: only attention-paired mode energies constrain temperature; remaining centers fit independent source intensities, and datacubes can use the raw temperature cost in a joint spatial MAP.';
             result.temperature_algorithm = 'grid_scan';
             result.temperature_policy = 'v20_attention_hardBE_softPM';
+            fixed_hard_window = [];
+            if isfield(settings, 'stage2_fixed_hard_be_window_meV')
+                fixed_hard_window = sort(abs(double(settings.stage2_fixed_hard_be_window_meV(:).')));
+            end
+            if numel(fixed_hard_window) >= 2 && all(isfinite(fixed_hard_window(1:2))) && ...
+                    fixed_hard_window(2) > fixed_hard_window(1)
+                fixed_hard_window = fixed_hard_window(1:2);
+                result.temperature_policy = 'v21_fixed_window_hardBE_softPM';
+                result.fixed_hard_be_window_meV = fixed_hard_window;
+            end
             result.T_fit = best.T_fit;
             result.cost = best.cost;
             result.inner_solver = best.inner_solver;
@@ -1122,6 +1133,7 @@ classdef EELS_PearsonSparse_FullFit
         function cuberes = run_test_datacube(filename, settings)
             if nargin < 2, settings = struct(); end
             settings = EELS_PearsonSparse_FullFit.defaults(settings);
+            settings.datacube_input_file=char(filename);
             figure_visibility_cleanup = EELS_PearsonSparse_FullFit.hidden_figure_cleanup(settings); %#ok<NASGU>
             [~, cube_tag] = fileparts(char(filename));
             if isempty(cube_tag), cube_tag = 'datacube'; end
@@ -1431,8 +1443,12 @@ classdef EELS_PearsonSparse_FullFit
             EELS_PearsonSparse_FullFit.notify_progress(settings, np, np, toc(run_timer), pixel_time, 'complete');
         end
 
-        function cuberes = rebuild_datacube_maps_from_results(cuberes, settings, pixel_time, run_timer, reused_stage1)
+        function cuberes = rebuild_datacube_maps_from_results(cuberes, settings, pixel_time, run_timer, reused_stage1, execution)
             if nargin < 5, reused_stage1 = false; end
+            if nargin < 6
+                execution=struct('parallel_enabled',false,'parallel_workers',0, ...
+                    'parallel_message','serial result-map rebuild');
+            end
             pixels = cuberes.sample_pixels(:).';
             np = numel(pixels);
             if isfield(cuberes, 'R2_map')
@@ -1539,8 +1555,8 @@ classdef EELS_PearsonSparse_FullFit
             elapsed = toc(run_timer);
             cuberes.benchmark = struct('total_seconds', elapsed, 'median_seconds_per_pixel', median(pixel_time, 'omitnan'), ...
                 'mean_seconds_per_pixel', mean(pixel_time, 'omitnan'), 'pixel_seconds', pixel_time, ...
-                'pixels_per_second', np ./ max(elapsed, eps), 'parallel_enabled', false, ...
-                'parallel_workers', 0, 'parallel_message', 'stage2 reused existing stage1 results');
+                'pixels_per_second', np ./ max(elapsed, eps), 'parallel_enabled', execution.parallel_enabled, ...
+                'parallel_workers', execution.parallel_workers, 'parallel_message', execution.parallel_message);
             cuberes.settings = EELS_PearsonSparse_FullFit.strip_runtime_settings(settings);
             EELS_PearsonSparse_FullFit.notify_progress(settings, numel(pixels), numel(pixels), elapsed, pixel_time, 'saving Stage2 result MAT');
             cuberes = EELS_PearsonSparse_FullFit.sanitize_for_save(cuberes);
@@ -1638,6 +1654,11 @@ classdef EELS_PearsonSparse_FullFit
 
         function notify_progress(settings, done, total, elapsed, pixel_times, label)
             if nargin < 6, label = 'datacube'; end
+            persistent last_label last_elapsed
+            fresh_phase = isempty(last_label) || ~strcmp(last_label,label) || ...
+                isempty(last_elapsed) || elapsed < last_elapsed;
+            update_ui = fresh_phase || done == 0 || done >= total || elapsed-last_elapsed >= 0.2;
+            if update_ui, last_label=label; last_elapsed=elapsed; end
             med_sec = median(pixel_times(:), 'omitnan');
             worker_factor = 1;
             if isfield(settings, 'datacube_parallel_effective_workers') && ...
@@ -1654,7 +1675,7 @@ classdef EELS_PearsonSparse_FullFit
             else
                 eta = NaN;
             end
-            if isfield(settings, 'datacube_progress_callback') && isa(settings.datacube_progress_callback, 'function_handle')
+            if update_ui && isfield(settings, 'datacube_progress_callback') && isa(settings.datacube_progress_callback, 'function_handle')
                 try
                     settings.datacube_progress_callback(done, total, elapsed, eta, med_sec, label);
                 catch
@@ -1697,19 +1718,20 @@ classdef EELS_PearsonSparse_FullFit
             if settings.datacube_parallel_workers > 0
                 workers = round(settings.datacube_parallel_workers);
             else
-                try
-                    workers = max(1, feature('numcores') - 1);
-                catch
-                    workers = 4;
-                end
-                workers = min(workers, 8);
+                workers = EELS_Parallel.default_workers();
             end
+            cluster = parcluster('local');
+            requested_workers = workers;
+            workers = min(workers,cluster.NumWorkers);
             workers = max(1, min([workers, np]));
             use_parallel = workers > 1;
             if ~use_parallel
                 message = 'parallel worker count resolved to 1';
             else
                 message = sprintf('using %d workers', workers);
+                if workers < requested_workers
+                    message=sprintf('%s (requested %d; limited by cluster capacity or pixel count)',message,requested_workers);
+                end
             end
         end
 
@@ -1966,8 +1988,7 @@ classdef EELS_PearsonSparse_FullFit
             checkpoint_file = fullfile(settings.test_output_dir, 'datacube_fit_checkpoint.mat');
             if settings.datacube_resume_checkpoint && isfile(checkpoint_file)
                 try
-                    C = load(checkpoint_file, 'checkpoint');
-                    cp = C.checkpoint;
+                    cp = EELS_Checkpoint.read(checkpoint_file);
                     same_total = isfield(cp, 'total') && isequal(double(cp.total), double(np));
                     same_pixels = false;
                     if isfield(cp, 'pixels') && numel(cp.pixels) <= numel(pixels)
@@ -2028,12 +2049,21 @@ classdef EELS_PearsonSparse_FullFit
             chunks = EELS_PearsonSparse_FullFit.datacube_pixel_chunks(np, workers, settings.datacube_parallel_chunks);
             n_chunks = numel(chunks);
             chunk_pixels = cell(1, n_chunks);
+            chunk_spectra = cell(1, n_chunks);
+            [ny, nx, ne] = size(cube);
+            spectra = reshape(cube, ny*nx, ne);
             for cc = 1:n_chunks
                 chunk_pixels{cc} = pixels(chunks{cc});
+                chunk_spectra{cc} = spectra(chunk_pixels{cc}, :);
+            end
+            if settings.datacube_checkpoint_enabled || settings.datacube_resume_checkpoint || ...
+                    isa(settings.datacube_stop_callback,'function_handle')
+                [results,pixel_time]=EELS_Parallel.fit_chunks(chunk_spectra,ene,chunk_pixels, ...
+                    chunks,ny,nx,settings,workers);
+                return;
             end
             chunk_results = cell(1, n_chunks);
             chunk_times = cell(1, n_chunks);
-            [ny, nx, ~] = size(cube);
             worker_settings = settings;
             worker_settings.datacube_progress_callback = [];
             worker_settings.datacube_stop_callback = [];
@@ -2048,9 +2078,9 @@ classdef EELS_PearsonSparse_FullFit
             catch
                 progress_queue = [];
             end
-            parfor cc = 1:n_chunks
+            parfor (cc = 1:n_chunks, workers)
                 [chunk_results{cc}, chunk_times{cc}] = EELS_PearsonSparse_FullFit.fit_datacube_pixel_chunk( ...
-                    cube, ene, chunk_pixels{cc}, ny, nx, worker_settings, progress_queue);
+                    chunk_spectra{cc}, ene, chunk_pixels{cc}, ny, nx, worker_settings, progress_queue);
             end
             results = cell(1, np);
             pixel_time = NaN(1, np);
@@ -2090,20 +2120,7 @@ classdef EELS_PearsonSparse_FullFit
         end
 
         function ensure_parallel_pool(workers)
-            pool = gcp('nocreate');
-            if ~isempty(pool)
-                try
-                    if pool.NumWorkers ~= workers
-                        delete(pool);
-                        pool = [];
-                    end
-                catch
-                    pool = [];
-                end
-            end
-            if isempty(pool)
-                parpool('local', workers);
-            end
+            EELS_Parallel.prepare(workers);
         end
 
         function close_parallel_pool()
@@ -2126,7 +2143,7 @@ classdef EELS_PearsonSparse_FullFit
             if requested_chunks > 0
                 n_chunks = max(1, min(np, round(requested_chunks)));
             else
-                n_chunks = max(workers, min(np, workers .* 3));
+                n_chunks = min(np,max(workers.*8,ceil(np./8)));
             end
             edges = unique(round(linspace(1, np + 1, n_chunks + 1)));
             chunks = {};
@@ -2138,7 +2155,7 @@ classdef EELS_PearsonSparse_FullFit
             end
         end
 
-        function [results, pixel_time] = fit_datacube_pixel_chunk(cube, ene, chunk_pixels, ny, nx, settings, progress_queue)
+        function [results, pixel_time] = fit_datacube_pixel_chunk(spectra, ene, chunk_pixels, ny, nx, settings, progress_queue)
             if nargin < 7
                 progress_queue = [];
             end
@@ -2148,7 +2165,7 @@ classdef EELS_PearsonSparse_FullFit
             prev_theta = [];
             for ii = 1:n
                 [yy, xx] = ind2sub([ny, nx], chunk_pixels(ii));
-                spectrum = squeeze(cube(yy, xx, :));
+                spectrum = spectra(ii, :).';
                 warm_theta = [];
                 if settings.datacube_parallel_warm_start_within_chunk
                     warm_theta = prev_theta;
@@ -3137,7 +3154,7 @@ classdef EELS_PearsonSparse_FullFit
                 end
                 batch_size = round(settings.datacube_parallel_phase_batch_size);
                 if ~isfinite(batch_size) || batch_size <= 0
-                    batch_size = max(16, 2 .* max(1, round(workers)));
+                    batch_size = max(64, 8 .* max(1, round(workers)));
                 end
                 batch_size = max(1, min(batch_size, numel(selected)));
                 for first = 1:batch_size:numel(selected)
@@ -3148,13 +3165,19 @@ classdef EELS_PearsonSparse_FullFit
                     batch = first:min(first + batch_size - 1, numel(selected));
                     batch_candidate = cell(1, numel(batch));
                     batch_elapsed = zeros(1, numel(batch));
-                    parfor bb = 1:numel(batch)
-                        kk = batch(bb);
-                        ii = selected(kk);
+                    batch_old = old_selected(batch);
+                    batch_context = contexts(selected(batch));
+                    batch_spectra = cell(1,numel(batch));
+                    for bb = 1:numel(batch)
+                        ii = selected(batch(bb));
+                        batch_spectra{bb} = squeeze(cube(pixels(ii) + ...
+                            (0:(size(cube,3)-1)).*size(cube,1).*size(cube,2)));
+                    end
+                    parfor (bb = 1:numel(batch), workers)
                         t0 = tic;
                         batch_candidate{bb} = EELS_PearsonSparse_FullFit.hierarchy_refit_one( ...
-                            ene, squeeze(cube(pixels(ii) + (0:(size(cube, 3) - 1)) .* size(cube, 1) .* size(cube, 2))), ...
-                            old_selected{kk}, contexts{ii}, worker_settings, max_iter, phase);
+                            ene, batch_spectra{bb}, batch_old{bb}, batch_context{bb}, ...
+                            worker_settings, max_iter, phase);
                         batch_elapsed(bb) = toc(t0);
                         if ~isempty(progress_queue), send(progress_queue, batch_elapsed(bb)); end
                     end
@@ -3336,7 +3359,7 @@ classdef EELS_PearsonSparse_FullFit
                 end
                 batch_size = round(settings.datacube_parallel_phase_batch_size);
                 if ~isfinite(batch_size) || batch_size <= 0
-                    batch_size = max(16, 2 .* max(1, round(workers)));
+                    batch_size = max(64, 8 .* max(1, round(workers)));
                 end
                 batch_size = max(1, min(batch_size, np));
                 for first = 1:batch_size:np
@@ -3349,7 +3372,7 @@ classdef EELS_PearsonSparse_FullFit
                     batch_out = batch_results;
                     batch_time = zeros(1, numel(batch));
                     batch_pixels = pixels(batch);
-                    parfor bb = 1:numel(batch)
+                    parfor (bb = 1:numel(batch), workers)
                         t0 = tic;
                         if isstruct(batch_results{bb}) && ~isfield(batch_results{bb}, 'error')
                             try
@@ -3562,54 +3585,6 @@ classdef EELS_PearsonSparse_FullFit
             end
         end
 
-        function T = initialize_joint_temperature(raw, valid, edge, settings, use_median)
-            T = raw;
-            med_global = median(raw(valid), 'omitnan');
-            if ~isfinite(med_global), med_global = median(settings.stage2_T_grid, 'omitnan'); end
-            T(~isfinite(T)) = med_global;
-            for pass = 1:3
-                Tnext = T;
-                for yy = 1:edge.ny
-                    for xx = 1:edge.nx
-                        if valid(yy, xx) && ~use_median, continue; end
-                        [vals, weights] = EELS_PearsonSparse_FullFit.temperature_neighbor_values(T, yy, xx, edge);
-                        if numel(vals) >= settings.stage2_spatial_map_min_neighbor_support
-                            Tnext(yy, xx) = EELS_PearsonSparse_FullFit.weighted_quantile(vals, weights, 0.5);
-                        end
-                    end
-                end
-                T = Tnext;
-            end
-        end
-
-        function [T, objective] = optimize_joint_temperature(T, data_cost, data_weight, valid, edge, grid, settings)
-            for sweep = 1:max(1, round(settings.stage2_spatial_map_iterations))
-                for color = 0:3
-                    for yy = 1:edge.ny
-                        for xx = 1:edge.nx
-                            if (2 .* mod(yy - 1, 2) + mod(xx - 1, 2)) ~= color, continue; end
-                            [vals, weights] = EELS_PearsonSparse_FullFit.temperature_neighbor_values(T, yy, xx, edge);
-                            if isempty(vals) && ~valid(yy, xx), continue; end
-                            cost = zeros(size(grid));
-                            if data_weight(yy, xx) > 0
-                                cost = cost + data_weight(yy, xx) .* reshape(data_cost(yy, xx, :), size(grid));
-                            end
-                            for jj = 1:numel(vals)
-                                cost = cost + settings.stage2_spatial_map_weight .* weights(jj) .* ...
-                                    EELS_PearsonSparse_FullFit.truncated_huber_temperature( ...
-                                    grid - vals(jj), settings.stage2_spatial_map_huber_scale_K, ...
-                                    settings.stage2_spatial_map_truncation_K);
-                            end
-                            [~, best] = min(cost);
-                            T(yy, xx) = grid(best);
-                        end
-                    end
-                end
-            end
-            objective = EELS_PearsonSparse_FullFit.joint_temperature_objective( ...
-                T, data_cost, data_weight, edge, grid, settings);
-        end
-
         function [vals, weights, indices] = temperature_neighbor_values(T, yy, xx, edge)
             vals = [];
             weights = [];
@@ -3650,70 +3625,6 @@ classdef EELS_PearsonSparse_FullFit
                         weights(end + 1) = w; %#ok<AGROW>
                         indices(end + 1) = sub2ind([edge.ny, edge.nx], y2, x2); %#ok<AGROW>
                     end
-                end
-            end
-        end
-
-        function cost = truncated_huber_temperature(delta_T, scale_K, trunc_K)
-            u = abs(double(delta_T)) ./ max(double(scale_K), eps);
-            huber = 0.5 .* u .^ 2;
-            tail = u > 1;
-            huber(tail) = u(tail) - 0.5;
-            trunc_u = abs(double(trunc_K)) ./ max(double(scale_K), eps);
-            trunc_cost = trunc_u - 0.5;
-            if trunc_u <= 1, trunc_cost = 0.5 .* trunc_u .^ 2; end
-            cost = min(huber, trunc_cost);
-        end
-
-        function objective = joint_temperature_objective(T, data_cost, data_weight, edge, grid, settings)
-            objective = 0;
-            for yy = 1:edge.ny
-                for xx = 1:edge.nx
-                    if ~isfinite(T(yy, xx)), continue; end
-                    if data_weight(yy, xx) > 0
-                        ci = reshape(data_cost(yy, xx, :), size(grid));
-                        objective = objective + data_weight(yy, xx) .* interp1(grid, ci, T(yy, xx), 'linear', 'extrap');
-                    end
-                    [vals, weights] = EELS_PearsonSparse_FullFit.temperature_neighbor_values(T, yy, xx, edge);
-                    for jj = 1:numel(vals)
-                        objective = objective + 0.5 .* settings.stage2_spatial_map_weight .* weights(jj) .* ...
-                            EELS_PearsonSparse_FullFit.truncated_huber_temperature( ...
-                            T(yy, xx) - vals(jj), settings.stage2_spatial_map_huber_scale_K, ...
-                            settings.stage2_spatial_map_truncation_K);
-                    end
-                end
-            end
-        end
-
-        function support = temperature_neighbor_support(valid, edge)
-            support = zeros(size(valid));
-            dummy = double(valid);
-            for yy = 1:edge.ny
-                for xx = 1:edge.nx
-                    [vals, ~] = EELS_PearsonSparse_FullFit.temperature_neighbor_values(dummy, yy, xx, edge);
-                    support(yy, xx) = nnz(vals > 0);
-                end
-            end
-        end
-
-        function uncertainty = joint_temperature_uncertainty(T, data_cost, data_weight, edge, grid, settings)
-            uncertainty = NaN(size(T));
-            for yy = 1:edge.ny
-                for xx = 1:edge.nx
-                    if ~isfinite(T(yy, xx)), continue; end
-                    local = zeros(size(grid));
-                    if data_weight(yy, xx) > 0
-                        local = local + data_weight(yy, xx) .* reshape(data_cost(yy, xx, :), size(grid));
-                    end
-                    [vals, weights] = EELS_PearsonSparse_FullFit.temperature_neighbor_values(T, yy, xx, edge);
-                    for jj = 1:numel(vals)
-                        local = local + settings.stage2_spatial_map_weight .* weights(jj) .* ...
-                            EELS_PearsonSparse_FullFit.truncated_huber_temperature( ...
-                            grid - vals(jj), settings.stage2_spatial_map_huber_scale_K, ...
-                            settings.stage2_spatial_map_truncation_K);
-                    end
-                    valley = EELS_PearsonSparse_FullFit.stage2_cost_valley(grid, local);
-                    uncertainty(yy, xx) = valley.uncertainty_K;
                 end
             end
         end
@@ -3869,10 +3780,10 @@ classdef EELS_PearsonSparse_FullFit
             shift0 = ene(imax);
             centers = zeros(1, nz);
             width_max = EELS_PearsonSparse_FullFit.expand_component_setting(settings.zlp_component_width_max_meV, nz, settings.zlp_width_bounds(2));
-            widths = min(linspace(0.8, 26, nz), 0.65 .* width_max);
+            widths = settings.stage1_initial_width_scale .* min(linspace(0.8, 26, nz), 0.65 .* width_max);
             if settings.stage1_zlp_gain_heavy_init_enabled
-                widthsL = widths .* linspace(1.02, max(settings.stage1_zlp_gain_width_boost, 1.02), nz);
-                widthsR = widths .* linspace(1.00, min(max(settings.stage1_zlp_loss_width_scale, 0.55), 1.25), nz);
+                widthsL = widths .* linspace(1.02, max(settings.stage1_zlp_gain_width_boost, eps), nz);
+                widthsR = widths .* linspace(1.00, max(settings.stage1_zlp_loss_width_scale, eps), nz);
             else
                 widthsL = widths;
                 widthsR = widths .* linspace(1.05, 1.8, nz);
@@ -4002,11 +3913,7 @@ classdef EELS_PearsonSparse_FullFit
             pm_s = coef(layout.pm_s);
             pm_a = coef(layout.pm_a);
             vib = kernel_columns.stokes * pm_s + kernel_columns.anti * pm_a;
-            if isempty(layout.bg)
-                bg = zeros(size(y_norm(:)));
-            else
-                bg = A(:, layout.bg) * coef(layout.bg);
-            end
+            bg = zeros(size(y_norm(:))); % Compatibility field; no independent BG.
             zlp_component_norm = zlp_shapes .* reshape(coef(layout.zlp), 1, []);
             fit = struct();
             fit.params = params;
@@ -4026,6 +3933,7 @@ classdef EELS_PearsonSparse_FullFit
             fit.inner_solver = inner_info;
             fit.zlp_region_policy = zlp_region_policy;
             fit.effective_settings = fit_settings;
+            fit.data_weights = sqrtW(:).^2;
             fit.zlp_core_fartail = EELS_PearsonSparse_FullFit.stage1_zlp_core_fartail_summary(ene(:), y_norm(:), zlp(:), fit_settings);
         end
 
@@ -4121,13 +4029,12 @@ classdef EELS_PearsonSparse_FullFit
             ns = numel(EM);
             S = EELS_PearsonSparse_FullFit.shift_kernel_matrix(ene(:), kernel_base, EM(:).');
             Aanti = EELS_PearsonSparse_FullFit.shift_kernel_matrix(ene(:), kernel_base, -EM(:).');
-            bg = zeros(n, 0);
-            A = [zlp_shapes, S, Aanti, bg];
+            A = [zlp_shapes, S, Aanti];
             layout = struct();
             layout.zlp = 1:nz;
             layout.pm_s = (nz + 1):(nz + ns);
             layout.pm_a = (nz + ns + 1):(nz + 2 * ns);
-            layout.bg = (nz + 2 * ns + 1):size(A, 2);
+            layout.bg = [];
             kernels = struct('stokes', S, 'anti', Aanti);
         end
 
@@ -4231,9 +4138,9 @@ classdef EELS_PearsonSparse_FullFit
             end
             start_idx = max(1, min(nz, round(settings.stage1_zlp_gain_asym_prior_start_index)));
             idx = start_idx:nz;
-            width_ratio = max(settings.stage1_zlp_gain_asym_width_ratio, 1);
+            width_ratio = max(settings.stage1_zlp_gain_asym_width_ratio, eps);
             width_penalty = max(0, log(width_ratio .* max(params.sR(idx), eps) ./ max(params.sL(idx), eps)));
-            shape_ratio = max(settings.stage1_zlp_gain_asym_shape_ratio, 1);
+            shape_ratio = max(settings.stage1_zlp_gain_asym_shape_ratio, eps);
             if EELS_PearsonSparse_FullFit.is_pvoigt_model(settings.zlp_model_type)
                 shape_penalty = max(0, log(shape_ratio .* max(params.mR(idx), eps) ./ max(params.mL(idx), eps)));
             else
@@ -4440,13 +4347,6 @@ classdef EELS_PearsonSparse_FullFit
                 n_rows = n_rows + 1;
                 rows{n_rows} = sqrt(settings.lambda_pm_l2) .* Rpm;
                 rhs{n_rows} = zeros(2 * ns, 1);
-            end
-            if settings.lambda_bg_l2 > 0 && isfield(layout, 'bg') && ~isempty(layout.bg)
-                Rbg = zeros(numel(layout.bg), ncoef);
-                Rbg(:, layout.bg) = eye(numel(layout.bg));
-                n_rows = n_rows + 1;
-                rows{n_rows} = sqrt(settings.lambda_bg_l2) .* Rbg;
-                rhs{n_rows} = zeros(numel(layout.bg), 1);
             end
             if settings.zlp_wide_component_l2 > 0 && isfield(layout, 'zlp') && ~isempty(layout.zlp)
                 zidx = layout.zlp(:).';
@@ -4742,6 +4642,15 @@ classdef EELS_PearsonSparse_FullFit
             end
             [Aineq, bineq, tail_mask] = EELS_PearsonSparse_FullFit.tail_overshoot_inequality(A, y, ene, settings);
             methods = EELS_PearsonSparse_FullFit.inner_solver_order(settings.inner_solver);
+            % L1 is a linear objective term for the nonnegative source columns.
+            % lsqlin cannot express it; selecting that path used to silently
+            % discard lambda_pm_l1. Use the existing QP implementation instead.
+            if any(l1 ~= 0)
+                methods = {'quadprog'};
+                if exist('quadprog','file') ~= 2
+                    error('EELS:L1RequiresQP','Nonzero lambda_pm_l1 requires quadprog.');
+                end
+            end
             info = struct('solver', '', 'exitflag', NaN, 'message', '', ...
                 'num_tail_constraints', nnz(tail_mask), 'max_tail_overshoot', NaN, ...
                 'finite_bounds_enabled', isfield(bounds, 'enabled') && bounds.enabled, ...
@@ -4795,6 +4704,9 @@ classdef EELS_PearsonSparse_FullFit
                 end
             end
             if isempty(coef)
+                if any(l1 ~= 0)
+                    error('EELS:L1SolveFailed','The L1-constrained QP failed: %s',info.message);
+                end
                 coef = lsqnonneg(C, d);
                 coef = min(max(coef, lb), ub);
                 info.solver = 'lsqnonneg_final_fallback';
@@ -4926,7 +4838,7 @@ classdef EELS_PearsonSparse_FullFit
                 high_taper = ones(size(eabs));
             end
             side_boost = ones(size(eabs));
-            gain_boost = max(settings.stage1_zlp_fartail_gain_boost, 1);
+            gain_boost = max(settings.stage1_zlp_fartail_gain_boost, eps);
             side_boost(ene < 0) = gain_boost;
             profile = low_taper .* high_taper .* side_boost;
             mask = isfinite(ene) & eabs >= start_e & eabs <= end_e;
@@ -4958,7 +4870,7 @@ classdef EELS_PearsonSparse_FullFit
             if numel(pair_e) < 2
                 pair_e = linspace(start_e, max_pair_e, 3);
             end
-            ratio = max(settings.stage1_zlp_gain_tail_prior_ratio, 1);
+            ratio = max(settings.stage1_zlp_gain_tail_prior_ratio, eps);
             grid_step = median(abs(diff(sort(ene))), 'omitnan');
             if ~isfinite(grid_step) || grid_step <= 0
                 grid_step = step;
@@ -4980,7 +4892,8 @@ classdef EELS_PearsonSparse_FullFit
             end
         end
 
-        function sqrtW = build_weights(ene, y_norm, settings)
+        function sqrtW = build_weights(ene, y_norm, settings, stage)
+            if nargin<4,stage=1;end
             eabs = abs(ene(:));
             tw = 4;
             core = 1 ./ (1 + exp((eabs - settings.core_downweight_width) ./ tw));
@@ -5005,8 +4918,15 @@ classdef EELS_PearsonSparse_FullFit
             floor_signal = max(settings.dynamic_weight_noise_sigma .* noise, 0.01 .* ref);
             balance = (ref ./ max(local, floor_signal)) .^ 0.45;
             balance = min(max(balance, 1), settings.dynamic_weight_max_gain);
-            w = w .* (1 + settings.dynamic_weight_strength .* (1 - core) .* (balance - 1));
+            dynamic = settings.dynamic_weight_strength .* (1 - core) .* (balance - 1);
+            w = w .* (1 + dynamic);
             w(~isfinite(w) | w <= 0) = 1;
+            if stage==1||stage==2
+                relative=EELS_FitWeights.regional(ene,core,high,tail,settings,stage);
+                scale=settings.(sprintf('stage%d_dynamic_weight_scale',stage));
+                if scale~=1,relative=relative.*(1+scale*dynamic)./(1+dynamic);end
+                w=w.*EELS_FitWeights.balance(w,relative);
+            end
             sqrtW = sqrt(w);
         end
 
@@ -5023,6 +4943,12 @@ classdef EELS_PearsonSparse_FullFit
                 return;
             end
 
+            if strcmpi(settings.adaptive_zlp_region_method,'fwhm')
+                [settings,policy]=EELS_ZLPWindow.apply(ene,y_norm,settings);
+                return;
+            elseif ~strcmpi(settings.adaptive_zlp_region_method,'legacy')
+                error('EELS:ZLPWindowMethod','Use fwhm or legacy for adaptive_zlp_region_method.');
+            end
             ene = ene(:);
             y = y_norm(:);
             good = isfinite(ene) & isfinite(y);
@@ -5082,6 +5008,26 @@ classdef EELS_PearsonSparse_FullFit
             policy.peak_fraction = settings.adaptive_zlp_core_fraction;
         end
 
+        function [theta, resnorm, exitflag, output] = run_stage1_nonlinear(ene,y,EM,obj_settings,theta0,lb,ub,settings)
+            if EELS_Native.supports_stage1(obj_settings)
+                context = EELS_Native.stage1_context(ene,y,EM,obj_settings);
+                obj = @(x) EELS_Native.objective(x,context);
+                native_settings = settings;
+                native_settings.native_objective_gradient = true;
+                try
+                    [theta,resnorm,exitflag,output] = EELS_PearsonSparse_FullFit.run_lsq(obj,theta0,lb,ub,native_settings);
+                    output.numerical_backend = 'cpp';
+                    return;
+                catch ME
+                    if strcmpi(settings.native_backend,'cpp'), rethrow(ME); end
+                    warning('EELS:NativeFallback','Native Stage1 failed; retrying MATLAB: %s',ME.message);
+                end
+            end
+            obj = @(x) EELS_PearsonSparse_FullFit.stage1_objective(x,ene,y,EM,obj_settings);
+            [theta,resnorm,exitflag,output] = EELS_PearsonSparse_FullFit.run_lsq(obj,theta0,lb,ub,settings);
+            output.numerical_backend = 'matlab';
+        end
+
         function [theta_opt, resnorm, exitflag, output] = run_lsq(obj, theta0, lb, ub, settings)
             if exist('lsqnonlin', 'file') == 2
                 display_mode = 'off';
@@ -5090,6 +5036,9 @@ classdef EELS_PearsonSparse_FullFit
                     'MaxIterations', settings.max_nonlinear_iter, ...
                     'FunctionTolerance', 1e-6, 'StepTolerance', 1e-6, ...
                     'FiniteDifferenceStepSize', 1e-4);
+                if isfield(settings,'native_objective_gradient') && settings.native_objective_gradient
+                    opts.SpecifyObjectiveGradient = true;
+                end
                 [theta_opt, resnorm, ~, exitflag, output] = lsqnonlin(obj, theta0, lb, ub, opts);
             else
                 penalty = @(x) sum(obj(min(max(x, lb), ub)).^2);
@@ -5146,6 +5095,11 @@ classdef EELS_PearsonSparse_FullFit
                 result.stage1_elapsed_seconds = NaN;
             end
             result.stage1 = fit;
+            result.numerical_backend = struct('requested',settings.native_backend, ...
+                'stage1_objective',fit.output.numerical_backend, ...
+                'nonlinear_optimizer','MATLAB lsqnonlin/fminsearch', ...
+                'stage1_final_decode',fit.inner_solver.solver, ...
+                'native_abi','2.1-native-1');
             if isfield(fit, 'zlp_core_fartail')
                 result.zlp_core_fartail = fit.zlp_core_fartail;
             else
@@ -5670,25 +5624,13 @@ classdef EELS_PearsonSparse_FullFit
             end
         end
 
-        function mask = stage2_transition_mask(stage1_result, ene, win, settings)
-            ene = ene(:);
-            if ~settings.stage2_transition_fit_enabled || numel(win) < 2
-                mask = false(size(ene));
-                return;
-            end
-            transition_start = settings.stage2_transition_min_meV;
-            if isfield(stage1_result, 'zlp_region_policy') && isfield(stage1_result.zlp_region_policy, 'guard_start_meV')
-                transition_start = max(transition_start, stage1_result.zlp_region_policy.guard_start_meV);
-            elseif isfield(settings, 'zlp_signal_guard_start_meV')
-                transition_start = max(transition_start, settings.zlp_signal_guard_start_meV);
-            end
-            transition_stop = win(1);
-            if ~(isfinite(transition_start) && isfinite(transition_stop)) || transition_stop <= transition_start
-                mask = false(size(ene));
-                return;
-            end
-            eabs = abs(ene);
-            mask = eabs >= transition_start & eabs < transition_stop & eabs <= win(2);
+        function w = attention_search_window(s)
+            hard=sort(abs(s.stage2_window_meV(:).'));
+            w=sort(abs(s.stage2_attention_window_meV(:).'));
+            if numel(w)<2,w=hard;end
+            w=[min(w(1),hard(1)),max(w(end),hard(end))];
+            span=diff(w)*s.stage2_attention_span_scale;
+            w(1)=w(1)*s.stage2_attention_start_scale;w(2)=w(1)+span;
         end
 
         function attention = build_stage2_attention(stage1_result, settings)
@@ -5696,10 +5638,7 @@ classdef EELS_PearsonSparse_FullFit
             eabs = abs(ene);
             hard_win = sort(abs(settings.stage2_window_meV(:).'));
             if numel(hard_win) < 2, hard_win = [40, 150]; end
-            att_win = sort(abs(settings.stage2_attention_window_meV(:).'));
-            if numel(att_win) < 2, att_win = hard_win; end
-            att_win(1) = min(att_win(1), hard_win(1));
-            att_win(2) = max(att_win(2), hard_win(2));
+            att_win = EELS_PearsonSparse_FullFit.attention_search_window(settings);
             broad = eabs >= att_win(1) & eabs <= att_win(2);
             signal = abs(stage1_result.raw_data_norm(:) - stage1_result.stage1.zlp_norm(:));
             signal = movmedian(signal, 7, 'omitnan');
@@ -5894,7 +5833,23 @@ classdef EELS_PearsonSparse_FullFit
             if isfield(settings, 'stage2_ratio_min_pairs')
                 min_pairs = max(0, round(settings.stage2_ratio_min_pairs));
             end
-            if ~isfield(settings, 'stage2_attention_hardbe_only_enabled') || settings.stage2_attention_hardbe_only_enabled
+            fixed_hard_window = [];
+            if isfield(settings, 'stage2_fixed_hard_be_window_meV')
+                fixed_hard_window = sort(abs(double(settings.stage2_fixed_hard_be_window_meV(:).')));
+            end
+            fixed_window_enabled = numel(fixed_hard_window) >= 2 && ...
+                all(isfinite(fixed_hard_window(1:2))) && ...
+                fixed_hard_window(2) > fixed_hard_window(1);
+            if fixed_window_enabled
+                fixed_hard_window = fixed_hard_window(1:2);
+                hard_idx = base_EM >= fixed_hard_window(1) & ...
+                    base_EM <= fixed_hard_window(2);
+                soft_idx = ~hard_idx;
+                hard_selection_status = 'fixed_hard_be_window';
+                if nnz(hard_idx) < min_pairs
+                    hard_selection_status = 'insufficient_fixed_hard_be_window_pairs';
+                end
+            elseif ~isfield(settings, 'stage2_attention_hardbe_only_enabled') || settings.stage2_attention_hardbe_only_enabled
                 hard_idx = hard_pair_score >= threshold;
                 hard_selection_status = 'threshold_ok';
                 if nnz(hard_idx) < min_pairs
@@ -5919,10 +5874,18 @@ classdef EELS_PearsonSparse_FullFit
             stage1_hard_EM = base_EM(hard_idx);
             hard_dense_EM = EELS_PearsonSparse_FullFit.stage2_hard_dense_em_grid( ...
                 attention, settings, threshold);
+            if fixed_window_enabled && ~isempty(hard_dense_EM)
+                hard_dense_EM = hard_dense_EM(hard_dense_EM >= fixed_hard_window(1) & ...
+                    hard_dense_EM <= fixed_hard_window(2));
+            end
             stage2_hard_EM = sort(unique([stage1_hard_EM(:); hard_dense_EM(:)]).');
             hard_dense_added_EM = setdiff(stage2_hard_EM(:).', base_EM(:).');
             soft_dense_EM = EELS_PearsonSparse_FullFit.stage2_soft_dense_em_grid( ...
                 stage2_hard_EM, attention, settings, threshold);
+            if fixed_window_enabled && ~isempty(soft_dense_EM)
+                soft_dense_EM = soft_dense_EM(soft_dense_EM < fixed_hard_window(1) | ...
+                    soft_dense_EM > fixed_hard_window(2));
+            end
             if ~isempty(soft_dense_EM)
                 stage1_soft_EM = sort(unique([stage1_soft_EM(:); soft_dense_EM(:)]).');
             end
@@ -5977,6 +5940,7 @@ classdef EELS_PearsonSparse_FullFit
             basis.hard_selection_status = hard_selection_status;
             basis.hard_pair_threshold = threshold;
             basis.hard_pair_floor = floor_threshold;
+            basis.fixed_hard_be_window_meV = fixed_hard_window;
             basis.min_hard_pairs = min_pairs;
             basis.num_hard_pairs = nnz(hard_idx_stage2);
             basis.num_soft_pairs = nnz(soft_idx_stage2);
@@ -6003,7 +5967,7 @@ classdef EELS_PearsonSparse_FullFit
             end
             hi_candidates = [];
             if isfield(settings, 'stage2_attention_window_meV') && ~isempty(settings.stage2_attention_window_meV)
-                hi_candidates(end + 1) = max(abs(settings.stage2_attention_window_meV(:)), [], 'omitnan'); %#ok<AGROW>
+                hi_candidates(end + 1) = max(EELS_PearsonSparse_FullFit.attention_search_window(settings)); %#ok<AGROW>
             end
             if isfield(settings, 'stage2_window_meV') && ~isempty(settings.stage2_window_meV)
                 hi_candidates(end + 1) = max(abs(settings.stage2_window_meV(:)), [], 'omitnan'); %#ok<AGROW>
@@ -6061,7 +6025,7 @@ classdef EELS_PearsonSparse_FullFit
             end
             hi_candidates = [];
             if isfield(settings, 'stage2_attention_window_meV') && ~isempty(settings.stage2_attention_window_meV)
-                hi_candidates(end + 1) = max(abs(settings.stage2_attention_window_meV(:)), [], 'omitnan'); %#ok<AGROW>
+                hi_candidates(end + 1) = max(EELS_PearsonSparse_FullFit.attention_search_window(settings)); %#ok<AGROW>
             end
             if isfield(settings, 'stage2_window_meV') && ~isempty(settings.stage2_window_meV)
                 hi_candidates(end + 1) = max(abs(settings.stage2_window_meV(:)), [], 'omitnan'); %#ok<AGROW>
@@ -6220,7 +6184,7 @@ classdef EELS_PearsonSparse_FullFit
             D(:, sort_idx) = Dsort;
         end
 
-        function val = stage2_pm_second_diff_cost(EM, pm, settings)
+        function val = stage2_pm_second_diff_cost(EM, pm, settings, D2)
             val = 0;
             if ~isfield(settings, 'stage2_pm_smooth_weight') || settings.stage2_pm_smooth_weight <= 0
                 return;
@@ -6230,7 +6194,9 @@ classdef EELS_PearsonSparse_FullFit
             if numel(EM) < 3 || numel(pm) ~= numel(EM)
                 return;
             end
-            D2 = EELS_PearsonSparse_FullFit.local_diff_matrix(EM, 2, settings.stage2_pm_smooth_max_gap_meV);
+            if nargin < 4
+                D2 = EELS_PearsonSparse_FullFit.local_diff_matrix(EM, 2, settings.stage2_pm_smooth_max_gap_meV);
+            end
             if isempty(D2)
                 return;
             end
@@ -6555,6 +6521,7 @@ classdef EELS_PearsonSparse_FullFit
             attention_cost_grid = NaN(1, nT);
             joint_rmse_grid = NaN(1, nT);
             regularization_cost_grid = NaN(1, nT);
+            inner_data_sum=NaN(1,nT);inner_regularization_sum=NaN(1,nT);inner_l1_cost=NaN(1,nT);
             pm_smooth_cost_grid = NaN(1, nT);
             zlp_delta_rms_grid = NaN(1, nT);
             linearity_R2_grid = NaN(1, nT);
@@ -6577,6 +6544,31 @@ classdef EELS_PearsonSparse_FullFit
             else
                 pair_weights = zeros(0, 1);
             end
+            native_coef = []; native_status = [];
+            use_native_scan = EELS_Native.enabled(settings) && ~settings.tail_overshoot_constraint && ...
+                ismember(lower(char(settings.inner_solver)),{'auto','lsqlin'}) && ...
+                all(isfinite(T_grid) & T_grid > 0);
+            if use_native_scan
+                [native_coef,native_status] = EELS_Native.stage2_coefficients( ...
+                    T_grid,basis,hard_stokes,hard_anti,soft_stokes,soft_anti,zlp_refine, ...
+                    y_stage2,sqrtW_stage2,settings);
+            end
+            static_settings = settings;
+            static_settings.stage2_soft_be_weight = 0;
+            [Reg_fixed,rhs_fixed] = EELS_PearsonSparse_FullFit.stage2_regularization_rows( ...
+                basis,0,static_settings,[],[]);
+            Reg_fixed = [Reg_fixed,zeros(size(Reg_fixed,1),n_zlp_refine)];
+            [zlp_Reg,zlp_rhs] = EELS_PearsonSparse_FullFit.stage2_zlp_refine_regularization(zlp_refine,base_ncoef);
+            coef_bounds = struct('lb',zeros(base_ncoef,1),'ub',Inf(base_ncoef,1),'enabled',false);
+            if n_zlp_refine > 0
+                coef_bounds = EELS_PearsonSparse_FullFit.stage2_append_zlp_refine_bounds(coef_bounds,zlp_refine);
+            end
+            soft_signal = [soft_stokes,soft_anti];
+            soft_settings = settings;
+            soft_settings.stage2_pm_smooth_weight = settings.stage2_soft_pm_smooth_weight;
+            hard_D2 = EELS_PearsonSparse_FullFit.local_diff_matrix(basis.EM_hard(:),2,settings.stage2_pm_smooth_max_gap_meV);
+            soft_D2 = EELS_PearsonSparse_FullFit.local_diff_matrix(basis.EM_soft(:),2,settings.stage2_pm_smooth_max_gap_meV);
+            l1 = zeros(base_ncoef+n_zlp_refine,1);
             for tt = 1:nT
                 T = T_grid(tt);
                 if ~isfinite(T) || T <= 0
@@ -6585,24 +6577,32 @@ classdef EELS_PearsonSparse_FullFit
                 q_hard = exp(-basis.EM_hard(:).' ./ max(kb .* T, eps));
                 q_soft = exp(-basis.EM_soft(:).' ./ max(kb .* T, eps));
                 hard_be_signal = hard_stokes + hard_anti .* q_hard;
-                soft_signal = [soft_stokes, soft_anti];
                 A2 = [hard_be_signal, soft_signal, zlp_refine.B];
-                [Reg, reg_rhs] = EELS_PearsonSparse_FullFit.stage2_regularization_rows(basis, 0, settings, q_hard, q_soft);
-                if n_zlp_refine > 0
-                    Reg = [Reg, zeros(size(Reg, 1), n_zlp_refine)];
-                    [zlp_Reg, zlp_rhs] = EELS_PearsonSparse_FullFit.stage2_zlp_refine_regularization( ...
-                        zlp_refine, base_ncoef);
-                    Reg = [Reg; zlp_Reg];
-                    reg_rhs = [reg_rhs; zlp_rhs];
+                Reg = Reg_fixed; reg_rhs = rhs_fixed;
+                if settings.stage2_soft_be_weight > 0 && n_soft > 0
+                    be = zeros(n_soft,base_ncoef+n_zlp_refine);
+                    be(:,soft_stokes_cols) = -diag(q_soft);
+                    be(:,soft_anti_cols) = eye(n_soft);
+                    Reg = [Reg;sqrt(settings.stage2_soft_be_weight).*be];
+                    reg_rhs = [reg_rhs;zeros(n_soft,1)];
                 end
-                coef_bounds = struct('lb', zeros(base_ncoef, 1), 'ub', Inf(base_ncoef, 1), ...
-                    'enabled', false, 'active_lower_count', 0, 'active_upper_count', 0);
-                if n_zlp_refine > 0
-                    coef_bounds = EELS_PearsonSparse_FullFit.stage2_append_zlp_refine_bounds(coef_bounds, zlp_refine);
+                Reg = [Reg;zlp_Reg]; reg_rhs = [reg_rhs;zlp_rhs];
+                if use_native_scan && native_status(1,tt) == 1
+                    coef = native_coef(:,tt);
+                    inner_info = struct('solver','cpp_bvls','exitflag',1, ...
+                        'message','C++ bounded active-set LS; KKT certified', ...
+                        'kkt_relative',native_status(2,tt),'iterations',native_status(3,tt), ...
+                        'num_tail_constraints',0,'max_tail_overshoot',NaN, ...
+                        'finite_bounds_enabled',n_zlp_refine>0, ...
+                        'finite_bounds_lower_count',nnz(coef_bounds.lb>0), ...
+                        'finite_bounds_upper_count',nnz(isfinite(coef_bounds.ub)));
+                else
+                    if use_native_scan
+                        warning('EELS:NativeFallback','Native Stage2 KKT check failed at %.4g K; using MATLAB.',T);
+                    end
+                    [coef, inner_info] = EELS_PearsonSparse_FullFit.solve_inner_linear(A2, y_stage2, ...
+                        sqrtW_stage2, Reg, reg_rhs, basis.energy_axis(:), settings, l1, coef_bounds);
                 end
-                l1 = zeros(size(A2, 2), 1);
-                [coef, inner_info] = EELS_PearsonSparse_FullFit.solve_inner_linear(A2, y_stage2, ...
-                    sqrtW_stage2, Reg, reg_rhs, basis.energy_axis(:), settings, l1, coef_bounds);
                 if isempty(coef) || any(~isfinite(coef))
                     continue;
                 end
@@ -6648,16 +6648,15 @@ classdef EELS_PearsonSparse_FullFit
                 end
                 reg_res = Reg * coef - reg_rhs;
                 reg_cost = mean(reg_res .^ 2, 'omitnan');
+                inner_data_sum(tt)=sum(rw.^2);
+                inner_regularization_sum(tt)=sum(reg_res.^2);
+                inner_l1_cost(tt)=2*sum(l1(:).*coef(:));
                 if ~isfinite(reg_cost), reg_cost = 0; end
-                pm_smooth_cost = EELS_PearsonSparse_FullFit.stage2_pm_second_diff_cost(basis.EM_hard, hard_pm_s, settings);
+                pm_smooth_cost = EELS_PearsonSparse_FullFit.stage2_pm_second_diff_cost(basis.EM_hard, hard_pm_s, settings,hard_D2);
                 if n_soft > 0
-                    soft_settings = settings;
-                    if isfield(settings, 'stage2_soft_pm_smooth_weight') && isfinite(settings.stage2_soft_pm_smooth_weight)
-                        soft_settings.stage2_pm_smooth_weight = settings.stage2_soft_pm_smooth_weight;
-                    end
                     pm_smooth_cost = pm_smooth_cost + ...
-                        EELS_PearsonSparse_FullFit.stage2_pm_second_diff_cost(basis.EM_soft, soft_pm_s, soft_settings) + ...
-                        EELS_PearsonSparse_FullFit.stage2_pm_second_diff_cost(basis.EM_soft, soft_pm_a, soft_settings);
+                        EELS_PearsonSparse_FullFit.stage2_pm_second_diff_cost(basis.EM_soft, soft_pm_s, soft_settings,soft_D2) + ...
+                        EELS_PearsonSparse_FullFit.stage2_pm_second_diff_cost(basis.EM_soft, soft_pm_a, soft_settings,soft_D2);
                 end
                 zlp_delta_rms = sqrt(mean(zlp_delta_norm(fit_mask) .^ 2, 'omitnan'));
                 [linearity_R2, pair_count] = EELS_PearsonSparse_FullFit.stage2_hardbe_linearity_diagnostic( ...
@@ -6733,24 +6732,12 @@ classdef EELS_PearsonSparse_FullFit
                 'attention_data_mse', attention_cost_grid, ...
                 'joint_RMSE', joint_rmse_grid, ...
                 'regularization_cost', regularization_cost_grid, ...
+                'inner_data_sum',inner_data_sum,'inner_regularization_sum',inner_regularization_sum, ...
+                'inner_l1_cost',inner_l1_cost,'inner_objective',inner_data_sum+inner_regularization_sum+inner_l1_cost, ...
                 'PM_smooth_penalty', pm_smooth_cost_grid, ...
                 'ZLP_delta_rms', zlp_delta_rms_grid, ...
                 'linearity_R2', linearity_R2_grid, ...
                 'effective_pair_count', effective_pair_count_grid);
-        end
-
-        function mse = stage2_weighted_data_mse(model_norm, y_norm, sqrtW, fit_mask)
-            model_norm = model_norm(:);
-            y_norm = y_norm(:);
-            sqrtW = sqrtW(:);
-            fit_mask = logical(fit_mask(:));
-            good = fit_mask & isfinite(model_norm) & isfinite(y_norm) & isfinite(sqrtW) & sqrtW > 0;
-            if nnz(good) < 1
-                mse = NaN;
-                return;
-            end
-            r = (model_norm(good) - y_norm(good)) .* sqrtW(good);
-            mse = mean(r .^ 2, 'omitnan');
         end
 
         function sqrtW = apply_stage2_far_tail_downweight(ene, sqrtW, settings, attention)
@@ -6895,15 +6882,6 @@ classdef EELS_PearsonSparse_FullFit
         end
 
 
-
-        function unc = estimate_stage2_uncertainty(T_grid, cost_grid)
-            valley = EELS_PearsonSparse_FullFit.stage2_cost_valley(T_grid, cost_grid);
-            if ~valley.available
-                unc = NaN;
-                return;
-            end
-            unc = valley.uncertainty_K;
-        end
 
         function cost_smooth = smooth_stage2_cost_profile(T_grid, cost_grid, settings)
             T_grid = T_grid(:).';
@@ -9406,7 +9384,7 @@ classdef EELS_PearsonSparse_FullFit
                 'EM_meV', [], 'PM_stokes_prior', [], 'PM_antistokes_prior', [], ...
                 'coef_stokes', [], 'coef_antistokes', [], 'confidence', [], ...
                 'fit_mask', [], 'sqrtW', [], 'R2_weighted', NaN, 'NRMSE_weighted', NaN, ...
-                'num_centers', 0, 'temperature_prior_K', NaN, 'coef_ratio_T_K', NaN, ...
+                'num_centers', 0, 'fitted_temperature_K', NaN, 'coef_ratio_T_K', NaN, ...
                 'coef_ratio_R2', NaN, 'coef_ratio_num_points', 0, 'solver', 'none', ...
                 'kernel_width_scale', 1);
             if ~(isstruct(res) && isfield(res, 'ene_corrected'))
@@ -9593,17 +9571,17 @@ classdef EELS_PearsonSparse_FullFit
                 Reg = [Reg; diag(wl2)]; %#ok<AGROW>
                 rhs = [rhs; zeros(ncoef, 1)]; %#ok<AGROW>
             end
-            T_prior = NaN;
+            T_fitted = NaN;
             if stage2_ok && isfield(res.stage2, 'T_fit') && isfinite(res.stage2.T_fit)
-                T_prior = res.stage2.T_fit;
+                T_fitted = res.stage2.T_fit;
             elseif isfield(res, 'T_fit') && isfinite(res.T_fit)
-                T_prior = res.T_fit;
+                T_fitted = res.T_fit;
             elseif isfield(res, 'T_soft') && isfinite(res.T_soft)
-                T_prior = res.T_soft;
+                T_fitted = res.T_soft;
             end
-            if settings.pm_deconv_be_prior_weight > 0 && isfinite(T_prior) && T_prior > 0
+            if settings.pm_deconv_be_prior_weight > 0 && isfinite(T_fitted) && T_fitted > 0
                 kb = 0.08617333262;
-                q = exp(-selected_EM(:) ./ max(kb .* T_prior, eps));
+                q = exp(-selected_EM(:) ./ max(kb .* T_fitted, eps));
                 B = zeros(nEM, ncoef);
                 for ii = 1:nEM
                     B(ii, ii) = -q(ii);
@@ -9657,7 +9635,7 @@ classdef EELS_PearsonSparse_FullFit
             deconv.R2_weighted = R2;
             deconv.NRMSE_weighted = nrmse;
             deconv.num_centers = nEM;
-            deconv.temperature_prior_K = T_prior;
+            deconv.fitted_temperature_K = T_fitted;
             deconv.solver = solver;
             deconv.kernel_width_scale = kernel_width_scale;
             if ratio_line.available
@@ -10058,7 +10036,7 @@ classdef EELS_PearsonSparse_FullFit
                 sprintf('centers: %d', deconv.num_centers)
                 sprintf('R2 weighted: %.5g', deconv.R2_weighted)
                 sprintf('NRMSE weighted: %.5g', deconv.NRMSE_weighted)
-                sprintf('T prior: %.1f K', deconv.temperature_prior_K)
+                sprintf('Fitted T: %.1f K', deconv.fitted_temperature_K)
                 sprintf('coef BE T: %.1f K', deconv.coef_ratio_T_K)
                 sprintf('coef BE R2: %.4g', deconv.coef_ratio_R2)
                 };

@@ -1,4 +1,4 @@
-﻿function [dm3struct] = DM3Import0( dm3filename )
+function [dm3struct] = DM3Import0( dm3filename )
 %DM3IMPORT0 Lightweight compatibility parser for DM3 import.
 global dm3file;
     global endianstyle;

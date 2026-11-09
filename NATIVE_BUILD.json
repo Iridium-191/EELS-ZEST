@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-09",
+  "matlab": "R2024b",
+  "compiler": "Microsoft Visual C++ 2022",
+  "native_version": "2.2-native-2",
+  "source": "native/eels_native_mex.cpp",
+  "binary": "eels_native_v22_mex.mexw64",
+  "source_sha256": "9910ba9e0239f6c7f4221835cef1a5c30332f8b638a4686b1a50339be38a6daa",
+  "binary_sha256": "88572d2498e70cea622bed17979dfa013887871b2df429b0d7b828af3024e66f"
+}

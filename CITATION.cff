@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: "If you use EELS-ZEST in research, please cite this software."
 type: software
 title: "EELS-ZEST: Zero-loss Estimation and Sparse Thermometry"
-version: 2.1.0
-date-released: 2026-08-28
+version: 2.2.0
+date-released: 2026-11-08
 license: GPL-3.0-only
 authors:
   - family-names: Mao

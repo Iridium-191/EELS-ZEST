@@ -1,4 +1,4 @@
-﻿classdef EELS_ZEST_App < handle
+classdef EELS_ZEST_App < handle
     %EELS_ZEST_APP GUI for EELS-ZEST.
     %
     % EELS-ZEST = Zero-loss Estimation and Sparse Thermometry.
@@ -43,6 +43,9 @@
         StatusArea
         TabGroup
         DataTab
+        ReferenceTab
+        ReferenceTuner
+        ReferenceStrategyActive = false
         Stage1Tab
         Stage2Tab
         DiagnosticTab
@@ -119,6 +122,11 @@
             if nargin < 3, manual_temperature_K = NaN; end
             app.applySTA(source, manual_temperature_K);
         end
+
+        function settings = fittingSettings(app,stage2)
+            % Same settings path used by single-spectrum and full-cube fitting.
+            settings=app.makeSettings(stage2,'serial');
+        end
     end
 
     methods (Access = private)
@@ -126,7 +134,7 @@
             [fig_pos, resolved_mode] = app.responsiveFigurePosition(app.LayoutMode);
             app.LayoutMode = resolved_mode;
             app.IsCompact = strcmp(resolved_mode, 'compact');
-            app.UIFigure = uifigure('Name', 'EELS-ZEST 2.1.0 | Zero-loss Estimation and Sparse Thermometry', ...
+            app.UIFigure = uifigure('Name', 'EELS-ZEST 2.2 | Zero-loss Estimation and Sparse Thermometry', ...
                 'Position', fig_pos, 'Color', [0.93 0.97 1.0], 'Visible', visible);
             app.UIFigure.CloseRequestFcn = @(~, ~)app.closeApp();
 
@@ -163,7 +171,7 @@
             else
                 uilabel(hg, 'Text', 'Z', 'FontSize', 28, 'FontWeight', 'bold', 'FontColor', [0.04 0.32 0.56]);
             end
-            title_label = uilabel(hg, 'Text', 'EELS-ZEST 2.1.0', 'FontSize', 30, 'FontWeight', 'bold', ...
+            title_label = uilabel(hg, 'Text', 'EELS-ZEST 2.2', 'FontSize', 30, 'FontWeight', 'bold', ...
                 'FontColor', [0.03 0.22 0.38]);
             title_label.Layout.Column = 2;
             subtitle = uilabel(hg, 'Text', 'Zero-loss Estimation and Sparse Thermometry', ...
@@ -176,6 +184,7 @@
             app.TabGroup = uitabgroup(root);
             app.TabGroup.Layout.Row = 2;
             app.DataTab = uitab(app.TabGroup, 'Title', 'Data', 'BackgroundColor', [0.92 0.96 1.0]);
+            app.ReferenceTab = uitab(app.TabGroup, 'Title', 'Reference tuning');
             app.Stage1Tab = uitab(app.TabGroup, 'Title', 'Stage 1: Sparse Deconvolution', 'BackgroundColor', [0.92 0.96 1.0]);
             app.Stage2Tab = uitab(app.TabGroup, 'Title', 'Stage 2: Thermometry', 'BackgroundColor', [0.92 0.96 1.0]);
             app.DiagnosticTab = uitab(app.TabGroup, 'Title', 'Diagnostics', 'BackgroundColor', [0.92 0.96 1.0]);
@@ -186,6 +195,8 @@
             app.buildDataTab();
             app.buildStageTab(false);
             app.buildStageTab(true);
+            app.ReferenceTuner=EELS_ReferenceTunerApp(app.Settings,[],@(s)app.applyTunedSettings(s), ...
+                visible,app.ReferenceTab,@()app.resetReferenceSettings(),@()app.referenceInput(),@()app.referenceBaseSettings());
             app.buildDiagnosticTab();
             app.buildPMTab();
             app.buildAdvancedTab();
@@ -353,7 +364,7 @@
             bx.Layout.Row = 1; bx.Layout.Column = 8;
             app.techLabel(pg, 'Energy bin', 1, 9); eb = uispinner(pg, 'Limits', [1 32], 'Value', 1, 'Step', 1);
             eb.Layout.Row = 1; eb.Layout.Column = 10;
-            app.techLabel(pg, 'Workers', 1, 11); workers = uispinner(pg, 'Limits', [1 128], 'Value', 8, 'Step', 1);
+            app.techLabel(pg, 'Workers', 1, 11); workers = uispinner(pg, 'Limits', [1 128], 'Value', EELS_Parallel.default_workers(), 'Step', 1);
             workers.Layout.Row = 1; workers.Layout.Column = 12;
 
             app.techLabel(pg, 'Crop min', 2, 1); cmin = uieditfield(pg, 'numeric', 'Value', -250);
@@ -361,9 +372,9 @@
             app.techLabel(pg, 'Crop max', 2, 3); cmax = uieditfield(pg, 'numeric', 'Value', 250);
             cmax.Layout.Row = 2; cmax.Layout.Column = 4;
             app.techButton(pg, 'Inherit data window', @(~, ~)app.inheritWindow(stage2), 2, [5 6]);
-            resume = uicheckbox(pg, 'Text', 'Resume checkpoint', 'Value', true, 'FontColor', [0.05 0.20 0.35]);
+            resume = uicheckbox(pg, 'Text', 'Resume checkpoint', 'Value', false, 'FontColor', [0.05 0.20 0.35]);
             resume.Layout.Row = 2; resume.Layout.Column = [8 9];
-            checkpoint = uicheckbox(pg, 'Text', 'Save checkpoint', 'Value', true, 'FontColor', [0.05 0.20 0.35]);
+            checkpoint = uicheckbox(pg, 'Text', 'Save checkpoint', 'Value', false, 'FontColor', [0.05 0.20 0.35]);
             checkpoint.Layout.Row = 2; checkpoint.Layout.Column = [10 12];
 
             app.techLabel(pg, 'Output', 3, 1);
@@ -402,7 +413,7 @@
             app.techButton(pg, 'Load result', @(~, ~)app.loadResult(), 6, [1 2]);
             app.techButton(pg, 'Send signal to Data', @(~, ~)app.importFitSignalToData(stage2), 6, [3 5]);
             if stage2
-                app.techButton(pg, '2-sigma outlier refit', @(~, ~)app.refitReliabilityOutliers(), 6, [6 8]);
+                app.techButton(pg, 'Reference tuner', @(~, ~)app.openReferenceTuner(), 6, [6 8]);
                 mapDD = uidropdown(pg, 'Items', app.mapItems(), 'Value', 'T data valid', ...
                     'ValueChangedFcn', @(~, ~)app.plotMap(true));
                 mapDD.Layout.Row = 4; mapDD.Layout.Column = [9 12];
@@ -470,11 +481,11 @@
 
             app.techLabel(pg, 'Energy bin', 2, 1); eb = uispinner(pg, 'Limits', [1 32], 'Value', 1, 'Step', 1);
             eb.Layout.Row = 2; eb.Layout.Column = 2;
-            app.techLabel(pg, 'Workers', 2, 3); workers = uispinner(pg, 'Limits', [1 128], 'Value', 8, 'Step', 1);
+            app.techLabel(pg, 'Workers', 2, 3); workers = uispinner(pg, 'Limits', [1 128], 'Value', EELS_Parallel.default_workers(), 'Step', 1);
             workers.Layout.Row = 2; workers.Layout.Column = 4;
-            resume = uicheckbox(pg, 'Text', 'Resume', 'Value', true, 'FontColor', [0.05 0.20 0.35]);
+            resume = uicheckbox(pg, 'Text', 'Resume', 'Value', false, 'FontColor', [0.05 0.20 0.35]);
             resume.Layout.Row = 2; resume.Layout.Column = [5 6];
-            checkpoint = uicheckbox(pg, 'Text', 'Checkpoint', 'Value', true, 'FontColor', [0.05 0.20 0.35]);
+            checkpoint = uicheckbox(pg, 'Text', 'Checkpoint', 'Value', false, 'FontColor', [0.05 0.20 0.35]);
             checkpoint.Layout.Row = 2; checkpoint.Layout.Column = [7 8];
 
             app.techLabel(pg, 'Crop min', 3, 1); cmin = uieditfield(pg, 'numeric', 'Value', -250);
@@ -517,7 +528,7 @@
             app.techButton(pg, 'Load result', @(~, ~)app.loadResult(), 8, [1 2]);
             app.techButton(pg, 'Send signal to Data', @(~, ~)app.importFitSignalToData(stage2), 8, [3 4]);
             if stage2
-                app.techButton(pg, '2-sigma outlier refit', @(~, ~)app.refitReliabilityOutliers(), 8, [5 6]);
+                app.techButton(pg, 'Reference tuner', @(~, ~)app.openReferenceTuner(), 8, [5 6]);
                 mapDD = uidropdown(pg, 'Items', app.mapItems(), 'Value', 'T data valid', ...
                     'ValueChangedFcn', @(~, ~)app.plotMap(true));
                 mapDD.Layout.Row = 8; mapDD.Layout.Column = [7 8];
@@ -942,152 +953,62 @@
             clear cleanup
         end
 
-        function refitReliabilityOutliers(app)
-            if isempty(app.Stage2CubeResult) || ~isfield(app.Stage2CubeResult, 'reliability_score_map')
-                app.logStatus('Run or load a Stage 2 datacube result before 2σ outlier refit.');
-                return;
-            end
-            cuberes = app.Stage2CubeResult;
-            rel = cuberes.reliability_score_map;
-            valid = isfinite(rel);
-            if isfield(cuberes, 'fit_status_map') && isequal(size(cuberes.fit_status_map), size(rel))
-                valid = valid & cuberes.fit_status_map > 0;
-            end
-            if nnz(valid) < 8
-                app.logStatus('Too few valid Stage 2 pixels for 2σ outlier detection.');
-                return;
-            end
-            sigmaN = 2;
-            [rel_mask, rel_stats, rel_z] = app.metricOutlierMask(rel, valid, sigmaN, 'lower');
-            [r2_mask, r2_stats, r2_z] = app.metricOutlierMask(app.optionalMap(cuberes, 'R2_map', rel), valid, sigmaN, 'lower');
-            [nrmse_mask, nrmse_stats, nrmse_z] = app.metricOutlierMask(app.optionalMap(cuberes, 'NRMSE_map', rel), valid, sigmaN, 'upper');
-            [unc_mask, unc_stats, unc_z] = app.metricOutlierMask(app.optionalMap(cuberes, 'T_uncertainty_map', rel), valid, sigmaN, 'upper');
-            mask = valid & (rel_mask | r2_mask | nrmse_mask | unc_mask);
-            severity = rel_z + r2_z + nrmse_z + unc_z;
-            if ~any(mask(:))
-                app.logStatus(sprintf('2σ outlier check found no candidates. rel:%d R2:%d NRMSE:%d uncertainty:%d', ...
-                    rel_stats.count, r2_stats.count, nrmse_stats.count, unc_stats.count));
-                return;
-            end
-
-            settings = app.makeSettings(true);
-            settings.run_stage2 = true;
-            settings.save_plots = false;
-            settings.save_diagnostic_plots = false;
-            settings.stage2_temperature_algorithm = 'grid_scan';
-
-            pix_list = find(mask(:)).';
-            map_size = size(rel);
-            if isfield(cuberes, 'sample_pixels') && ~isempty(cuberes.sample_pixels)
-                [pix_list, ia] = intersect(cuberes.sample_pixels(:).', pix_list, 'stable');
-                result_idx = ia;
-            else
-                result_idx = pix_list;
-            end
-            if isempty(pix_list)
-                app.logStatus('2σ candidates are not present in the stored result list.');
-                return;
-            end
-            pix_score = severity(pix_list);
-            pix_score(~isfinite(pix_score)) = 0;
-            [~, ord] = sort(pix_score, 'descend');
-            pix_list = pix_list(ord);
-            result_idx = result_idx(ord);
-            max_refit = min(numel(pix_list), 80);
-            pix_list = pix_list(1:max_refit);
-            result_idx = result_idx(1:max_refit);
-            d = uiprogressdlg(app.UIFigure, 'Title', '2σ outlier refit', ...
-                'Message', sprintf('Refitting %d 2σ metric outliers...', numel(pix_list)), ...
-                'Indeterminate', 'off', 'Value', 0, 'Cancelable', 'on');
-            accepted = 0;
-            attempted = 0;
-            run_timer = tic;
-            cleanup = onCleanup(@()app.closeProgressDialog(d));
-            for ii = 1:numel(pix_list)
-                if d.CancelRequested, break; end
-                pix = pix_list(ii);
-                idx = result_idx(ii);
-                if idx < 1 || idx > numel(cuberes.results), continue; end
-                old_res = cuberes.results{idx};
-                if ~(isstruct(old_res) && ~isfield(old_res, 'error')), continue; end
-                base_res = old_res;
-                if ~isempty(app.Stage1CubeResult) && isfield(app.Stage1CubeResult, 'results')
-                    sidx = [];
-                    if isfield(app.Stage1CubeResult, 'sample_pixels') && ~isempty(app.Stage1CubeResult.sample_pixels)
-                        sidx = find(app.Stage1CubeResult.sample_pixels(:).' == pix, 1, 'first');
-                    elseif numel(app.Stage1CubeResult.results) == prod(map_size)
-                        sidx = pix;
-                    end
-                    if ~isempty(sidx) && sidx <= numel(app.Stage1CubeResult.results)
-                        candidate_base = app.Stage1CubeResult.results{sidx};
-                        if isstruct(candidate_base) && ~isfield(candidate_base, 'error')
-                            base_res = candidate_base;
-                        end
-                    end
-                end
-                [yy, xx] = ind2sub(map_size, pix);
-                pixel_settings = settings;
-                [pixel_settings, boost_info] = app.boostSettingsForDominantLossTerms(pixel_settings, old_res);
-                is_low_R2_refit = isequal(size(r2_mask), map_size) && r2_mask(pix);
-                is_shape_outlier = is_low_R2_refit || (isequal(size(nrmse_mask), map_size) && nrmse_mask(pix));
-                [pixel_settings, reg_info] = app.boostRegularizationForOutlierRefit(pixel_settings, is_shape_outlier);
-                attempted = attempted + 1;
-                try
-                    new_res = EELS_PearsonSparse_FullFit.promote_stage1_to_stage2(base_res, pixel_settings);
-                catch
-                    continue;
-                end
-                old_rel = app.resultMetricValue(old_res, 'reliability');
-                new_rel = app.resultMetricValue(new_res, 'reliability');
-                old_R2 = app.resultMetricValue(old_res, 'R2');
-                new_R2 = app.resultMetricValue(new_res, 'R2');
-                old_N = app.resultMetricValue(old_res, 'NRMSE');
-                new_N = app.resultMetricValue(new_res, 'NRMSE');
-                old_unc = app.resultMetricValue(old_res, 'T_uncertainty');
-                new_unc = app.resultMetricValue(new_res, 'T_uncertainty');
-                improves = (isfinite(new_rel) && (~isfinite(old_rel) || new_rel >= old_rel + 0.02)) || ...
-                    (isfinite(new_R2) && (~isfinite(old_R2) || new_R2 >= old_R2 + 1e-4)) || ...
-                    (isfinite(new_N) && (~isfinite(old_N) || new_N <= old_N - 5e-4)) || ...
-                    (isfinite(new_unc) && (~isfinite(old_unc) || new_unc <= old_unc - max(10, 0.08 .* abs(old_unc))));
-                preserves = (~isfinite(old_R2) || (isfinite(new_R2) && new_R2 >= old_R2 - 8e-4)) && ...
-                    (~isfinite(old_N) || (isfinite(new_N) && new_N <= old_N + 0.003)) && ...
-                    (~isfinite(old_rel) || (isfinite(new_rel) && new_rel >= old_rel - 0.05));
-                if improves && preserves
-                    new_res.metric_outlier_refit = struct('accepted', true, 'sigma_N', sigmaN, ...
-                        'old_reliability', old_rel, 'new_reliability', new_rel, ...
-                        'old_R2', old_R2, 'new_R2', new_R2, ...
-                        'old_NRMSE', old_N, 'new_NRMSE', new_N, ...
-                        'old_T_uncertainty', old_unc, 'new_T_uncertainty', new_unc, ...
-                        'target_T_K', local_T, 'boosted_loss_terms', {boost_info.terms}, ...
-                        'boost_info', boost_info, 'regularization_info', reg_info);
-                    cuberes.results{idx} = new_res;
-                    accepted = accepted + 1;
-                end
-                d.Value = ii ./ max(numel(pix_list), 1);
-                d.Message = sprintf('2σ outlier refit: %d/%d accepted %d', ii, numel(pix_list), accepted);
-                d.Message = strrep(d.Message, char(34813), '-sigma');
-                drawnow limitrate;
-            end
-            pixel_time = NaN(1, numel(cuberes.results));
-            cuberes = EELS_PearsonSparse_FullFit.rebuild_datacube_maps_from_results(cuberes, settings, pixel_time, run_timer, true);
-            cuberes.metric_outlier_refit = struct('sigma_N', sigmaN, 'attempted', attempted, ...
-                'accepted', accepted, 'candidate_count', nnz(mask), 'severity_map', severity);
-            app.Stage2CubeResult = cuberes;
-            app.CurrentResult = app.firstValidResult(cuberes.results);
-            app.plotMap(true);
-            if ~isempty(app.CurrentResult)
-                app.plotSpectrumResult(app.CurrentResult, true);
-                app.plotDiagnosticSelection();
-            end
-            app.updateRLDeconvControl();
-            app.logStatus(sprintf('2σ outlier refit complete: candidates %d, attempted %d, accepted %d.', nnz(mask), attempted, accepted));
-            clear cleanup
-            app.closeProgressDialog(d);
-        end
-
         function requestPause(app)
             app.StopRequested = true;
-            app.logStatus('Pause requested. Serial datacube fitting will stop after the current pixel and save a checkpoint.');
+            app.logStatus('Pause requested. Fitting will stop at the next checkpoint boundary and save completed pixels.');
+        end
+
+        function openReferenceTuner(app)
+            app.TabGroup.SelectedTab=app.ReferenceTab;
+        end
+
+        function applyTunedSettings(app,settings)
+            app.Settings=EELS_PearsonSparse_FullFit.defaults(settings);
+            app.ReferenceStrategyActive=true;
+            app.syncReferenceControls();
+            app.clearFitCaches(true);
+            app.populateAdvancedTable();
+            app.logStatus('Reference strategy applied to Stage1/2. Previous fit caches cleared; checkpoint resume disabled.');
+        end
+
+        function resetReferenceSettings(app)
+            app.Settings=EELS_PearsonSparse_FullFit.defaults(struct());
+            app.Settings.datacube_sample_strategy='all';app.Settings.datacube_sample_pixels=Inf;
+            app.ReferenceStrategyActive=false;app.syncReferenceControls();app.clearFitCaches(true);app.populateAdvancedTable();
+            app.logStatus('Stage1/2 fitting parameters restored to defaults.');
+        end
+
+        function syncReferenceControls(app)
+            for stage2=[false true]
+                c=app.stageControls(stage2);c.cmin.Value=min(app.Settings.crop_range);c.cmax.Value=max(app.Settings.crop_range);
+                c.resume.Value=false;
+                if stage2
+                    c.algorithm.Value=app.Settings.stage2_temperature_algorithm;
+                    c.spatial.Value=app.Settings.stage1_hierarchical_enabled;
+                    if isfield(c,'classPrune')&&~isempty(c.classPrune)&&isfield(app.Settings,'stage2_attention_class_prune_enabled')
+                        c.classPrune.Value=app.Settings.stage2_attention_class_prune_enabled;
+                    end
+                end
+            end
+        end
+
+        function s=referenceBaseSettings(app)
+            app.applyAdvancedTable();s=app.Settings;
+            s.crop_range=sort([app.Stage1Controls.cmin.Value,app.Stage1Controls.cmax.Value]);
+        end
+
+        function r=referenceInput(app)
+            if ~isempty(app.RawCube)
+                y=app.DataSelectedY;x=app.DataSelectedX;
+                if isempty(y),y=round(app.Stage1Controls.py.Value);end
+                if isempty(x),x=round(app.Stage1Controls.px.Value);end
+                r=struct('ene',app.Ene,'spectrum',squeeze(app.RawCube(y,x,:)), ...
+                    'source',sprintf('%s | pixel Y=%d X=%d',app.DataFile,y,x),'group',app.DataFile);
+                r.cube=app.RawCube;
+            elseif ~isempty(app.CurrentResult)
+                r=struct('ene',app.CurrentResult.ene_raw,'spectrum',app.CurrentResult.raw_data, ...
+                    'source','Current fitted spectrum','group',app.LoadedResultFile);
+            else,error('EELS:Reference','Import and select a spectrum in Data, or import a reference in the tuning tab.');end
         end
 
         function settings = makeSettings(app, stage2, run_mode)
@@ -1121,11 +1042,10 @@
             switch lower(string(run_mode))
                 case "parallel"
                     settings.datacube_parallel_enabled = true;
-                    settings.datacube_resume_checkpoint = false;
-                    settings.close_parallel_pool_after_run = true;
+                    settings.close_parallel_pool_after_run = false;
                 otherwise
                     settings.datacube_parallel_enabled = false;
-                    settings.datacube_checkpoint_enabled = true;
+                    % Checkpointing follows the user checkbox in serial mode too.
             end
             if stage2
                 settings.stage2_temperature_algorithm = char(ctrl.algorithm.Value);
@@ -2031,6 +1951,8 @@
                 key = data{ii, 1};
                 txt = data{ii, 3};
                 if isfield(s, key)
+                    % Preserve unedited settings exactly across the GUI round trip.
+                    if strcmp(char(string(txt)), app.valueToText(s.(key))), continue; end
                     s.(key) = app.textToValue(txt, s.(key));
                 end
             end
@@ -2038,11 +1960,9 @@
         end
 
         function resetAdvanced(app)
-            app.Settings = EELS_PearsonSparse_FullFit.defaults(struct());
-            app.Settings.datacube_sample_strategy = 'all';
-            app.Settings.datacube_sample_pixels = Inf;
-            app.populateAdvancedTable();
-            app.logStatus('Advanced parameters reset to defaults.');
+            app.resetReferenceSettings();
+            app.ReferenceTuner.Settings=app.Settings;app.ReferenceTuner.refreshParameters();
+            app.ReferenceTuner.ActiveLabel.Text='Default settings restored';
         end
 
         function exportData(app)
@@ -2737,6 +2657,11 @@
         end
 
         function closeApp(app)
+            if ~isempty(app.ReferenceTuner)&&isvalid(app.ReferenceTuner)&&app.ReferenceTuner.Running
+                app.ReferenceTuner.stop();
+                app.logStatus('Stopping reference tuning; wait for the current candidate and dataset export before closing.');
+                return;
+            end
             app.deleteGraphicsHandles('DataCursorHandles');
             app.deleteGraphicsHandles('Stage1CursorHandles');
             app.deleteGraphicsHandles('Stage2CursorHandles');
@@ -3239,7 +3164,7 @@
 
         function txt = valueToText(~, val)
             if islogical(val) || isnumeric(val)
-                txt = mat2str(val);
+                txt = mat2str(val, 17);
             elseif ischar(val)
                 txt = val;
             elseif isstring(val)
@@ -3286,7 +3211,7 @@
             if contains(key, 'parallel')
                 tip = 'Use parallel for full datacubes; 2-4 workers on modest PCs, 8+ only if memory is comfortable.';
             elseif contains(key, 'checkpoint') || contains(key, 'resume')
-                tip = 'Keep checkpointing on for long serial runs. Resume requires the same output folder.';
+                tip = 'Checkpoint saving is off by default. Enable it when needed; resume only with identical data, settings and output folder.';
             elseif contains(key, 'crop_range')
                 tip = 'Choose the physically useful energy range. Narrower crops are faster but may miss high-frequency features.';
             elseif contains(key, 'energy_bin')
@@ -3306,7 +3231,7 @@
             elseif contains(key, 'attention')
                 tip = 'Controls feature-window selection. Lower thresholds or raise gain when obvious peaks are missed.';
             elseif contains(key, 'temperature_algorithm')
-                tip = 'v2.1 keeps attention hard-BE temperature evidence; ZLP-guided inference never smooths data-valid temperatures.';
+                tip = 'Attention hard-BE pairs provide temperature evidence; ZLP-guided inference never smooths data-valid temperatures.';
             elseif contains(key, 'hierarchical') || contains(key, 'spatial_zlp')
                 tip = 'Hierarchical Stage 1 shares ZLP shape within spectral clusters while preserving per-pixel amplitudes and phonon source intensities.';
             elseif contains(key, 'spatial_refit')
@@ -3320,166 +3245,12 @@
             end
         end
 
-        function [settings, info] = boostSettingsForDominantLossTerms(~, settings, res)
-            settings = EELS_PearsonSparse_FullFit.defaults(settings);
-            info = struct('enabled', false, 'terms', {{}}, 'fractions', [], ...
-                'loss_weight_boost', settings.stage2_outlier_refit_loss_weight_boost, ...
-                'attention_boost', settings.stage2_outlier_refit_attention_boost);
-            if ~(isstruct(res) && isfield(res, 'loss_breakdown') && ...
-                    isfield(res.loss_breakdown, 'names') && isfield(res.loss_breakdown, 'fraction'))
-                return;
-            end
-            residual_terms = {'zlp_core', 'near_shoulder', 'anti_signal', ...
-                'stokes_signal', 'high_frequency', 'far_tail'};
-            if iscell(res.loss_breakdown.names)
-                names = res.loss_breakdown.names;
-            else
-                names = cellstr(res.loss_breakdown.names);
-            end
-            frac = double(res.loss_breakdown.fraction(:).');
-            keep = ismember(names, residual_terms) & isfinite(frac) & frac > 0;
-            if ~any(keep)
-                return;
-            end
-            n_top = max(1, round(settings.stage2_outlier_refit_top_loss_count));
-            [vals, ord] = sort(frac(keep), 'descend');
-            kept_names = names(keep);
-            kept_names = kept_names(ord);
-            n_top = min(n_top, numel(kept_names));
-            terms = kept_names(1:n_top);
-            vals = vals(1:n_top);
-            data_boost = max(1, settings.stage2_outlier_refit_loss_weight_boost);
-            att_boost = max(1, settings.stage2_outlier_refit_attention_boost);
-            for ii = 1:numel(terms)
-                switch terms{ii}
-                    case 'zlp_core'
-                        settings.core_weight = min(settings.core_weight .* min(data_boost, 1.20), 0.55);
-                    case 'near_shoulder'
-                        settings.shoulder_weight = min(settings.shoulder_weight .* data_boost, 2.5);
-                        settings.stage2_transition_fit_weight = min(settings.stage2_transition_fit_weight .* att_boost, 4.0);
-                        settings.stage2_transition_attention_gain = min(settings.stage2_transition_attention_gain .* att_boost, 6.0);
-                    case 'anti_signal'
-                        settings.signal_weight = min(settings.signal_weight .* data_boost, 5.0);
-                        if isfield(settings, 'stage2_allow_aggressive_antistokes') && settings.stage2_allow_aggressive_antistokes
-                            settings.stage2_antistokes_fit_weight_boost = min(settings.stage2_antistokes_fit_weight_boost .* att_boost, 3.8);
-                            settings.stage2_antistokes_attention_boost = min(settings.stage2_antistokes_attention_boost .* att_boost, 3.5);
-                            settings.stage2_attention_threshold = max(0.08, settings.stage2_attention_threshold .* 0.88);
-                        else
-                            settings.stage2_antistokes_fit_weight_boost = min(settings.stage2_antistokes_fit_weight_boost, 1.45);
-                            settings.stage2_antistokes_attention_boost = min(settings.stage2_antistokes_attention_boost, 1.35);
-                            settings.stage2_antistokes_noise_sigma = max(settings.stage2_antistokes_noise_sigma, 1.8);
-                            settings.stage2_attention_threshold = max(0.14, settings.stage2_attention_threshold .* 0.96);
-                        end
-                    case 'stokes_signal'
-                        settings.signal_weight = min(settings.signal_weight .* data_boost, 5.0);
-                        settings.stage2_attention_gain = min(settings.stage2_attention_gain .* att_boost, 18);
-                        settings.stage2_attention_threshold = max(0.08, settings.stage2_attention_threshold .* 0.90);
-                    case 'high_frequency'
-                        settings.highfreq_weight = min(settings.highfreq_weight .* data_boost, 7.0);
-                        settings.stage2_attention_gain = min(settings.stage2_attention_gain .* att_boost, 18);
-                        settings.stage2_highfreq_overshoot_weight = min(settings.stage2_highfreq_overshoot_weight .* att_boost, 2.5);
-                        settings.stage2_attention_threshold = max(0.08, settings.stage2_attention_threshold .* 0.90);
-                    case 'far_tail'
-                        settings.tail_weight = min(settings.tail_weight .* data_boost, 8.0);
-                        settings.stage2_highfreq_overshoot_weight = min(settings.stage2_highfreq_overshoot_weight .* att_boost, 2.8);
-                end
-            end
-            settings.stage2_attention_floor = min(0.35, settings.stage2_attention_floor .* 1.08);
-            info.enabled = true;
-            info.terms = terms;
-            info.fractions = vals;
-        end
-
-        function [settings, info] = boostRegularizationForOutlierRefit(~, settings, shape_outlier)
-            settings = EELS_PearsonSparse_FullFit.defaults(settings);
-            extra = 1;
-            if nargin >= 3 && logical(shape_outlier)
-                extra = max(1, settings.stage2_outlier_refit_low_R2_extra_boost);
-            end
-            old_smooth = settings.stage2_pm_smooth_weight;
-            smooth_boost = max(1, settings.stage2_outlier_refit_smooth_boost) .* extra;
-            settings.stage2_pm_smooth_weight = min(old_smooth .* smooth_boost, settings.stage2_outlier_refit_max_smooth);
-            info = struct('enabled', true, 'shape_outlier', logical(shape_outlier), ...
-                'old_smooth', old_smooth, 'new_smooth', settings.stage2_pm_smooth_weight, ...
-                'extra_boost', extra);
-        end
-
-        function [mask, stats, zmap] = metricOutlierMask(~, map, valid, sigmaN, side)
-            mask = false(size(valid));
-            zmap = zeros(size(valid));
-            stats = struct('available', false, 'side', side, 'mean', NaN, 'std', NaN, ...
-                'threshold', NaN, 'count', 0);
-            if isempty(map) || ~isequal(size(map), size(valid))
-                return;
-            end
-            map = double(map);
-            valid_map = valid & isfinite(map);
-            vals = map(valid_map);
-            if numel(vals) < 8, return; end
-            mu = mean(vals, 'omitnan');
-            sig = std(vals, 0, 'omitnan');
-            if ~(isfinite(mu) && isfinite(sig) && sig > 0), return; end
-            stats.available = true;
-            stats.mean = mu;
-            stats.std = sig;
-            switch lower(side)
-                case 'lower'
-                    thr = mu - sigmaN .* sig;
-                    mask = valid_map & map < thr;
-                    zmap(valid_map) = max(0, (mu - map(valid_map)) ./ sig);
-                otherwise
-                    thr = mu + sigmaN .* sig;
-                    mask = valid_map & map > thr;
-                    zmap(valid_map) = max(0, (map(valid_map) - mu) ./ sig);
-            end
-            stats.threshold = thr;
-            stats.count = nnz(mask);
-        end
-
         function map = optionalMap(~, s, field_name, template)
             if isstruct(s) && isfield(s, field_name) && isequal(size(s.(field_name)), size(template))
                 map = s.(field_name);
             else
                 map = NaN(size(template));
             end
-        end
-
-        function val = resultMetricValue(~, res, name)
-            val = NaN;
-            if ~(isstruct(res) && ~isfield(res, 'error')), return; end
-            switch lower(name)
-                case 'reliability'
-                    if isfield(res, 'reliability_score'), val = res.reliability_score; end
-                case 'r2'
-                    if isfield(res, 'metrics') && isfield(res.metrics, 'R2'), val = res.metrics.R2; end
-                case 'nrmse'
-                    if isfield(res, 'metrics') && isfield(res.metrics, 'NRMSE'), val = res.metrics.NRMSE; end
-                case 't_uncertainty'
-                    if isfield(res, 'T_uncertainty')
-                        val = res.T_uncertainty;
-                    elseif isfield(res, 'T_uncertainty_K')
-                        val = res.T_uncertainty_K;
-                    elseif isfield(res, 'error_budget') && isfield(res.error_budget, 'total_T_uncertainty_K')
-                        val = res.error_budget.total_T_uncertainty_K;
-                    end
-            end
-        end
-
-        function val = localMedianMapValue(~, map, yy, xx, exclude_mask)
-            val = NaN;
-            if isempty(map) || yy < 1 || xx < 1 || yy > size(map, 1) || xx > size(map, 2)
-                return;
-            end
-            y1 = max(1, yy - 1); y2 = min(size(map, 1), yy + 1);
-            x1 = max(1, xx - 1); x2 = min(size(map, 2), xx + 1);
-            block = map(y1:y2, x1:x2);
-            if nargin >= 5 && ~isempty(exclude_mask) && isequal(size(exclude_mask), size(map))
-                ex = exclude_mask(y1:y2, x1:x2);
-                block(ex) = NaN;
-            end
-            vals = block(isfinite(block));
-            if isempty(vals), vals = map(isfinite(map)); end
-            if ~isempty(vals), val = median(vals, 'omitnan'); end
         end
 
         function deleteGraphicsHandles(app, prop_name)
